@@ -2426,21 +2426,21 @@ def _execute_discovery_rule(rule_id):
             scanned_ips.append(ip)
             hostname = _snmp_get(ip, hostname_oid, community, timeout_ms, retries) or ''
             hostname = hostname.strip()
-            # 主机名过滤：按分隔符分段取指定段（1=第一段，存为 1-based）
+            # 如果 SNMP 未返回主机名，则回退为 IP，避免因为 no_hostname 直接跳过可达设备
+            if not hostname:
+                hostname = ip
             # 主机名过滤：取「前 N 段」拼成主机名（域名格式如 SHA1.PE1 或 SHA1.PE2.example.com，取第2段即取前2段得 SHA1.PE1 / SHA1.PE2）
             split_char = (_get_setting('discovery_hostname_split_char', '') or '').strip()
             try:
-                seg_one_based = int(_get_setting('discovery_hostname_segment_index', '1') or '1')
+                # 默认取前 2 段拼成主机名（如 sha1.pe1.example.com -> sha1.pe1）
+                seg_one_based = int(_get_setting('discovery_hostname_segment_index', '2') or '2')
                 seg_one_based = max(1, min(seg_one_based, 20))
             except (TypeError, ValueError):
                 seg_one_based = 1
-            if split_char and seg_one_based >= 1:
+            if split_char and seg_one_based >= 1 and hostname:
                 parts = hostname.split(split_char)
                 taken = parts[:seg_one_based]
                 hostname = split_char.join(taken).strip()
-            if not hostname:
-                skipped.append({'ip': ip, 'reason': 'no_hostname'})
-                continue
             dev_type_raw = ''
             if device_type_oid:
                 dev_type_raw = (_snmp_get(ip, device_type_oid, community, timeout_ms, retries) or '').strip()
@@ -3715,7 +3715,7 @@ def get_settings():
         'discovery_frequency': _get_setting('discovery_frequency', 'none'),
         'discovery_type_keywords': discovery_type_keywords,
         'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', '.'),
-        'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '1'),
+        'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '2'),
         # LDAP
         'ldap_enabled': _get_setting('ldap_enabled', '0'),
         'ldap_server': _get_setting('ldap_server', ''),
@@ -4140,10 +4140,10 @@ def update_settings():
         _set_setting('discovery_hostname_split_char', str(data.get('discovery_hostname_split_char') or '').strip()[:4])
     if 'discovery_hostname_segment_index' in data:
         try:
-            v = int(data.get('discovery_hostname_segment_index') or 1)
+            v = int(data.get('discovery_hostname_segment_index') or 2)
             _set_setting('discovery_hostname_segment_index', str(max(1, min(10, v))))
         except (TypeError, ValueError):
-            _set_setting('discovery_hostname_segment_index', '1')
+            _set_setting('discovery_hostname_segment_index', '2')
 
     # 自动发现：执行频率（只允许固定几种值）
     if 'discovery_frequency' in data:
