@@ -80,31 +80,40 @@ export SECRET_KEY=your-random-secret-key
 flask --app app init-db
 ```
 
-### 5. 启动服务
+### 5. 一键部署（推荐）
 
-**HTTPS（默认，端口 443）**：内置自签名证书，首次启动自动生成（有效期 100 年）：
+**Linux**（自动安装 systemd 服务，开机自启）：
 
 ```bash
-# 直接运行（默认 HTTPS 443；Linux/Mac 绑定 443 常需 root：sudo python app.py）
+cd vConfig
+sudo ./run.sh
+```
+
+脚本会自动安装 OpenSSL、Python3、Nginx（可选），创建虚拟环境，初始化数据库，并注册为 systemd 服务 `vconfig`。部署完成后使用 systemctl 管理：
+
+```bash
+sudo systemctl status vconfig   # 查看状态
+sudo systemctl start vconfig   # 启动
+sudo systemctl stop vconfig    # 停止
+sudo systemctl restart vconfig # 重启
+```
+
+**macOS 或非 systemd 系统**：运行 `./run.sh` 将以前台方式启动，Ctrl+C 停止。
+
+### 6. 手动启动
+
+**HTTPS（默认，端口 443）**：
+
+```bash
 python app.py
-
-# 无 root 时改用其它端口
-FLASK_PORT=8443 python app.py
+FLASK_PORT=8443 python app.py   # 无 root 时
 ```
 
-**HTTP（端口 80）**：禁用 HTTPS 时：
+**HTTP**：`FLASK_HTTPS=0 python app.py`
 
-```bash
-FLASK_HTTPS=0 python app.py
-# 或
-FLASK_HTTPS=0 gunicorn -w 4 -b 0.0.0.0:80 app:app
-```
+访问 `https://<服务器IP>`（自签名证书需在浏览器中接受/信任），使用初始化后的管理员账号（admin / admin123）登录。
 
-**生产环境**：若使用 Gunicorn，需配合 HTTPS 需额外配置；或仍建议用 Nginx/Caddy 反向代理做 SSL 终结，代理到本机 80。
-
-访问 `https://<服务器IP>`（自签名证书需在浏览器中接受/信任），或 `http://<服务器IP>`（若已设置 `FLASK_HTTPS=0`），使用初始化后的管理员账号登录（或通过「系统设置」创建用户）。
-
-### 6. 首次使用建议
+### 7. 首次使用建议
 
 1. 登录后进入「系统设置」→「备份设置」，配置默认 Telnet/SSH 账号、超时、线程数等。
 2. 在「设备管理」中添加设备，或使用「批量导入」按「主机名 IP 设备类型 [分组]」格式导入。
@@ -117,6 +126,7 @@ FLASK_HTTPS=0 gunicorn -w 4 -b 0.0.0.0:80 app:app
 
 ```
 vConfig/
+├── vconfig.service     # systemd 服务单元（Linux 自动安装）
 ├── app.py              # Flask 应用入口与路由
 ├── config.py            # 配置（数据目录、数据库、默认账号等）
 ├── models.py            # 数据模型

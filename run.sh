@@ -48,6 +48,19 @@ _install_nginx() {
     fi
 }
 
+_kill_port_if_used() {
+    local port=$1
+    local pids
+    pids=$(lsof -i :"$port" -t 2>/dev/null)
+    if [ -n "$pids" ]; then
+        echo "端口 $port 已被占用，正在终止占用进程: $pids"
+        for pid in $pids; do
+            sudo kill -9 "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+        done
+        sleep 1
+    fi
+}
+
 _install_python3() {
     if command -v apt-get &>/dev/null; then
         sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip
@@ -105,7 +118,7 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
-echo "[4/7] 创建虚拟环境并安装依赖..."
+echo "[4/8] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
     $PYTHON_CMD -m venv venv
     ./venv/bin/pip install -q --upgrade pip
@@ -114,19 +127,37 @@ else
     ./venv/bin/pip install -q -r requirements.txt
 fi
 
-echo "[5/7] 初始化数据目录与数据库..."
+echo "[5/8] 初始化数据目录与数据库..."
 mkdir -p data data/configs data/log
 if [ ! -f vconfig.db ] && [ ! -f config_backup.db ] && [ ! -f data/vconfig.db ] && [ ! -f data/config_backup.db ]; then
     ./venv/bin/flask --app app init-db
 fi
 ./venv/bin/flask --app app reset-admin-password
 
-echo "[6/7] 确定监听端口与访问地址..."
-# 非 root 时使用 8443 避免绑定 443 失败
-if [ "$(id -u)" != "0" ] && [ -z "$FLASK_PORT" ]; then
-    export FLASK_PORT=8443
+echo "[6/8] 确定监听端口与访问地址..."
+DEFAULT_PORT="443"
+[ "$(id -u)" != "0" ] && DEFAULT_PORT="8443"
+if [ -z "$FLASK_PORT" ]; then
+    printf "是否使用默认端口 %s？[Y/n]: " "$DEFAULT_PORT"
+    read -r use_default
+    use_default=${use_default:-Y}
+    if [[ "$use_default" =~ ^[Yy] ]]; then
+        PORT=$DEFAULT_PORT
+    else
+        while true; do
+            printf "请输入端口号 (1-65535): "
+            read -r PORT
+            if [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; then
+                break
+            fi
+            echo "无效端口，请重新输入。"
+        done
+    fi
+    export FLASK_PORT=$PORT
+else
+    PORT=$FLASK_PORT
 fi
-PORT="${FLASK_PORT:-443}"
+_kill_port_if_used "$PORT"
 # 本机访问地址（供客户点击或复制）
 if command -v hostname &>/dev/null; then
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -144,7 +175,25 @@ else
     ACCESS_URL="https://${IP}:${PORT}"
 fi
 
-echo "[7/7] 启动服务..."
+echo "[7/8] 安装 systemd 服务..."
+RUN_USER="${SUDO_USER:-$USER}"
+if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
+    RUN_USER="root"
+fi
+if command -v systemctl &>/dev/null && [ -d /etc/systemd/system ]; then
+    sed -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
+        -e "s|{{PORT}}|${PORT}|g" \
+        -e "s|{{RUN_USER}}|$RUN_USER|g" \
+        "$SCRIPT_DIR/vconfig.service" | sudo tee /etc/systemd/system/vconfig.service > /dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl enable vconfig
+    sudo systemctl start vconfig
+    echo "systemd 服务 vconfig 已安装并启动。"
+else
+    echo "提示：未检测到 systemd，将以前台方式启动（适用于 macOS 或非 systemd 系统）。"
+fi
+
+echo "[8/8] 部署完成"
 echo ""
 echo "=============================================="
 echo "  vConfig 部署完成"
@@ -155,9 +204,22 @@ echo ""
 echo "  首次登录：用户名 admin  密码 admin123"
 echo "  登录后请在「系统设置」中修改管理员密码。"
 echo "=============================================="
-echo "  若需绑定 443 端口，请使用: sudo ./run.sh"
-echo "  停止服务: 在当前终端按 Ctrl+C"
+if command -v systemctl &>/dev/null; then
+    echo "  服务管理（systemctl）："
+    echo "    查看状态: sudo systemctl status vconfig"
+    echo "    停止服务: sudo systemctl stop vconfig"
+    echo "    启动服务: sudo systemctl start vconfig"
+    echo "    重启服务: sudo systemctl restart vconfig"
+else
+    echo "  若需绑定 443 端口，请使用: sudo ./run.sh"
+    echo "  停止服务: 在当前终端按 Ctrl+C"
+fi
 echo "=============================================="
 echo ""
 
-exec ./venv/bin/python app.py
+if command -v systemctl &>/dev/null && [ -d /etc/systemd/system ]; then
+    echo "vConfig 已作为系统服务运行。"
+    exit 0
+else
+    exec ./venv/bin/python app.py
+fi
