@@ -13,9 +13,10 @@ if [ ! -f config_backup.db ] && [ ! -f data/config_backup.db ]; then
 fi
 echo "=========================================="
 echo "  vConfig 配置备份管理系统"
-echo "  请在浏览器中打开："
-echo "  http://127.0.0.1:5001 或 http://localhost:5001"
+echo "  请在浏览器中打开（默认 HTTPS 自签名证书）："
+echo "  https://127.0.0.1 或 https://localhost  (端口 443)"
 echo "=========================================="
-echo "  (端口 5001 避免与系统占用 5000 冲突)"
+echo "  绑定 443 端口 Linux/Mac 可能需要: sudo ./venv/bin/python app.py"
+echo "  禁用 HTTPS: FLASK_HTTPS=0 ./venv/bin/python app.py"
 echo "=========================================="
 exec ./venv/bin/python app.py

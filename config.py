@@ -8,6 +8,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_ROOT = os.environ.get('CONFIG_BACKUP_ROOT', os.path.join(BASE_DIR, 'data'))
 CONFIGS_DIR = os.path.join(DATA_ROOT, 'configs')
 LOG_DIR = os.path.join(DATA_ROOT, 'log')
+CERTS_DIR = os.path.join(DATA_ROOT, 'certs')  # HTTPS 自签名证书目录
 
 # 数据库
 SQLALCHEMY_DATABASE_URI = os.environ.get(

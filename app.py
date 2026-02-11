@@ -20,7 +20,7 @@ from flask import Flask, request, jsonify, send_from_directory, render_template,
 from config import (
     CONFIGS_DIR, LOG_DIR, DEFAULT_USERNAME, DEFAULT_PASSWORD,
     BACKUP_THREAD_NUM, EXCLUDE_PATTERNS, DEFAULT_CONNECTION_TYPE, SSH_PORT,
-    BACKUP_RETENTION_DAYS, DEFAULT_TIMEZONE, DATA_ROOT,
+    BACKUP_RETENTION_DAYS, DEFAULT_TIMEZONE, DATA_ROOT, CERTS_DIR,
 )
 from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, _isoformat_utc
 from device_drivers import register_driver, load_custom_drivers
@@ -4910,6 +4910,29 @@ def fix_device_types():
 # 应用加载后延迟启动内置备份调度器
 _start_scheduler_delayed()
 
+def _ensure_ssl_certs():
+    """若启用 HTTPS 且证书不存在，则生成自签名证书（有效期 100 年）"""
+    cert_file = os.path.join(CERTS_DIR, 'cert.pem')
+    key_file = os.path.join(CERTS_DIR, 'key.pem')
+    if os.path.isfile(cert_file) and os.path.isfile(key_file):
+        return (cert_file, key_file)
+    os.makedirs(CERTS_DIR, mode=0o700, exist_ok=True)
+    import subprocess
+    # 有效期 36500 天 ≈ 100 年（自签名证书无公开 CA 限制）
+    cmd = [
+        'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
+        '-keyout', key_file, '-out', cert_file,
+        '-days', '36500', '-nodes',
+        '-subj', '/CN=localhost/O=vConfig/C=CN',
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        return (cert_file, key_file)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        app.logger.warning('生成自签名证书失败（需安装 openssl）: %s，将使用 HTTP', e)
+        return None
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
@@ -4920,6 +4943,16 @@ if __name__ == '__main__':
         _ensure_device_telnet_port_column()
         _ensure_user_allowed_groups_column()
     debug = os.environ.get('FLASK_DEBUG', '1') == '1'
-    host = os.environ.get('FLASK_HOST', '0.0.0.0')  # 0.0.0.0 允许本机与局域网访问
-    port = int(os.environ.get('FLASK_PORT', '5001'))  # 5001 避免与 macOS AirPlay 占用的 5000 冲突
-    app.run(host=host, port=port, debug=debug)
+    host = os.environ.get('FLASK_HOST', '0.0.0.0')
+    use_https = os.environ.get('FLASK_HTTPS', '1') == '1'
+    port = int(os.environ.get('FLASK_PORT', '443' if use_https else '80'))
+    ssl_context = None
+    if use_https:
+        certs = _ensure_ssl_certs()
+        if certs:
+            ssl_context = certs
+            app.logger.info('HTTPS 模式：使用自签名证书 %s', certs[0])
+        else:
+            use_https = False
+            port = 80 if port == 443 else port
+    app.run(host=host, port=port, debug=debug, ssl_context=ssl_context)

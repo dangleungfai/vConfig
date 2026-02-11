@@ -8,3 +8,4 @@ venv/
 .venv/
 *.pyc
 .DS_Store
+data/certs/

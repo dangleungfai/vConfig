@@ -47,6 +47,10 @@ pip install -r requirements.txt
 | BACKUP_CONNECTION_TYPE | 默认连接方式 | `TELNET` 或 `SSH` |
 | BACKUP_THREAD_NUM | 备份并发线程数 | `10` |
 | SECRET_KEY | Flask 会话密钥 | 生产环境**必须**设置为随机字符串 |
+| FLASK_PORT | 监听端口 | `443`（HTTPS 时）/ `80`（HTTP 时） |
+| FLASK_HTTPS | 是否启用 HTTPS（自签名证书） | `1`（默认启用） |
+
+**HTTPS 自签名证书**：默认启用时，首次启动会在 `data/certs/` 下自动生成自签名证书（有效期 100 年），需系统已安装 `openssl`。设置 `FLASK_HTTPS=0` 可禁用 HTTPS 改用 HTTP。
 
 生产环境示例：
 
@@ -64,21 +68,27 @@ flask --app app init-db
 
 ### 5. 启动服务
 
-**开发环境：**
+**HTTPS（默认，端口 443）**：内置自签名证书，首次启动自动生成（有效期 100 年）：
 
 ```bash
+# 直接运行（默认 HTTPS 443；Linux/Mac 绑定 443 常需 root：sudo python app.py）
 python app.py
-# 或
-flask --app app run --host 0.0.0.0 --port 5000
+
+# 无 root 时改用其它端口
+FLASK_PORT=8443 python app.py
 ```
 
-**生产环境（推荐使用 Gunicorn）：**
+**HTTP（端口 80）**：禁用 HTTPS 时：
 
 ```bash
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
+FLASK_HTTPS=0 python app.py
+# 或
+FLASK_HTTPS=0 gunicorn -w 4 -b 0.0.0.0:80 app:app
 ```
 
-访问 `http://<服务器IP>:5000`，使用初始化后的管理员账号登录（或通过「系统设置」创建用户）。
+**生产环境**：若使用 Gunicorn，需配合 HTTPS 需额外配置；或仍建议用 Nginx/Caddy 反向代理做 SSL 终结，代理到本机 80。
+
+访问 `https://<服务器IP>`（自签名证书需在浏览器中接受/信任），或 `http://<服务器IP>`（若已设置 `FLASK_HTTPS=0`），使用初始化后的管理员账号登录（或通过「系统设置」创建用户）。
 
 ### 6. 首次使用建议
 

@@ -19,9 +19,11 @@ Authorization: Bearer <你的 token>
 示例：
 
 ```bash
-curl -H "Authorization: Bearer your-token-here" "http://localhost:5001/api/dashboard"
-curl -X POST -H "Authorization: Bearer your-token-here" -H "Content-Type: application/json" "http://localhost:5001/api/backup/run"
+curl -k -H "Authorization: Bearer your-token-here" "https://localhost/api/dashboard"
+curl -k -X POST -H "Authorization: Bearer your-token-here" -H "Content-Type: application/json" "https://localhost/api/backup/run"
 ```
+
+（默认 HTTPS 端口 443，自签名证书需加 `-k` 跳过校验；若使用 HTTP 或其它地址请替换。）
 
 未认证或 Token 错误时，接口返回 `401`，body 为 `{"error": "unauthorized"}`。
 
