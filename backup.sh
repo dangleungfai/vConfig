@@ -1,5 +1,5 @@
 #!/bin/bash
-# 代码备份脚本 - 创建 Git 提交和标签用于一键恢复
+# vConfig 代码备份脚本 - 创建 Git 提交和标签，用于 RESTORE.md 一键恢复
 
 set -e
 
@@ -25,16 +25,7 @@ fi
 
 # 创建提交
 TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
-COMMIT_MSG="备份：功能完整版本 - $TIMESTAMP
-
-已完成功能：
-- 全局页脚（当前时间、来访者IP、自定义文案）
-- 时间显示时区修复（UTC+Z格式）
-- 设备管理与已备份配置列表同步
-- 配置文件下载功能
-- 删除设备确认流程优化
-- SSH连接测试修复
-- 添加设备表单顺序调整（主机名、管理IP、设备类型）"
+COMMIT_MSG="vConfig 代码备份 - $TIMESTAMP"
 
 echo "创建提交..."
 git commit -m "$COMMIT_MSG"
@@ -42,7 +33,7 @@ git commit -m "$COMMIT_MSG"
 # 创建备份标签
 TAG_NAME="backup-$(date +%Y%m%d-%H%M%S)"
 echo "创建备份标签: $TAG_NAME"
-git tag -a "$TAG_NAME" -m "代码备份：功能完整版本 - $TIMESTAMP"
+git tag -a "$TAG_NAME" -m "vConfig 代码备份 - $TIMESTAMP"
 
 echo ""
 echo "✅ 备份完成！"

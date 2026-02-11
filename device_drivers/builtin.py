@@ -64,7 +64,7 @@ class RouterOSDriver(BaseDeviceDriver):
         return self.backup_config.get('init_commands', [])
     
     def get_backup_command(self) -> str:
-        # 与 telneter.py 完全一致：含 "success\n"，结尾 output_success
+        # 含 "success\n"，结尾 output_success
         return self.backup_config.get(
             'backup_command',
             ':foreach i in=(:put[/export]&:put[:put (("output_").("success\n"))]) do={$i}'

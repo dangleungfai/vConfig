@@ -42,7 +42,7 @@ def _routeros_default_config():
     return {
         'backup_config': {
             'init_commands': [],
-            # 与 telneter.py 完全一致：含 "success\n"，结尾输出 output_success
+            # 含 "success\n"，结尾输出 output_success
             'backup_command': ':foreach i in=(:put[/export]&:put[:put (("output_").("success\n"))]) do={$i}',
             'prompt': 'output_success'
         },
@@ -487,7 +487,7 @@ def run_backup_task(
                     compiled_prompts = [re.compile(p.encode() if isinstance(p, str) else p) for p in prompts]
                     tn.expect(compiled_prompts, timeout=3)
             
-            # RouterOS（与 telneter.py 一致）：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success, 90)
+            # RouterOS：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success, 90)
             dev_type_upper = (dev_type or '').strip().upper()
             if dev_type_upper in ('ROS', 'ROUTEROS'):
                 prompt_str = driver.get_prompt()

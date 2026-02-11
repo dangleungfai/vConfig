@@ -7,3 +7,4 @@ data/
 venv/
 .venv/
 *.pyc
+.DS_Store

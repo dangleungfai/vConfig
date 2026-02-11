@@ -1,55 +1,70 @@
-# 配置备份 Web 管理
+# vConfig — 配置备份管理系统
 
-将原 `telneter.py` 命令行备份脚本改造为 Web 界面管理，支持设备管理、一键备份、日志查看、配置文件浏览。
+vConfig 是一套面向网络设备的配置备份与变更管理 Web 系统，支持 Telnet/SSH 登录、多厂商设备类型、配置对比与变动展示、告警 Webhook 等。
 
-## 功能
+---
 
-- **设备管理**：添加/编辑/删除设备，支持批量导入 `ip_list` 格式
-- **备份执行**：Web 点击立即备份，多线程并发（默认 10 线程）
-- **备份日志**：查看每次备份结果（OK / Fail_Network / Fail_Login / Fail）
-- **配置浏览**：按站点/主机浏览已备份的配置文件
-- **全局设置**：默认 Telnet 用户名/密码，支持设备独立账号
-- **支持设备类型**：Cisco、Juniper、Huawei、H3C、RouterOS
+## 系统功能
 
-## 部署
+- **设备管理**：添加/编辑/删除设备，支持分组、设备类型、批量导入（主机名 IP 类型 [分组]）
+- **备份执行**：全量备份与单台立即备份，多线程并发，支持 Telnet / SSH，可配置超时与端口
+- **备份日志**：按时间查看每次备份结果（成功/失败及原因）
+- **已备份配置**：按设备浏览配置文件列表，支持下载、配置对比（最新 vs 上一份）、单设备历史与 diff
+- **配置变动**：集中展示最近一次备份中各设备的配置变动（新增/删除命令），支持按设备查看明细
+- **配置全文搜索**：在已备份配置中按关键字搜索
+- **合规检查**：基于规则的配置合规检测（可选）
+- **系统设置**：默认 Telnet/SSH 账号、备份超时与线程数、备份失败告警 Webhook（支持测试）、API Token、时区、LDAP 等
+- **用户与权限**：多用户、角色（管理员/运维/只读）、分组权限
+- **自动发现**：基于 SNMP 的自动发现规则（可选）
+- **仪表盘**：备份统计、未备份设备、配置变动概览、最近登录与安全审计
 
-### 1. 安装依赖
+**支持设备类型**：Cisco、Juniper、Huawei、H3C、RouterOS 等（可扩展设备类型与驱动）。
+
+---
+
+## 部署步骤
+
+### 1. 环境要求
+
+- Python 3.8+
+- 建议使用虚拟环境
+
+### 2. 安装依赖
 
 ```bash
 cd config_backup_web
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量（可选）
+### 3. 配置环境变量（可选）
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| CONFIG_BACKUP_ROOT | 数据根目录（configs、log） | 项目内 data/ |
-| DATABASE_URL | 数据库连接 | sqlite:///config_backup.db |
-| BACKUP_USERNAME | 默认 Telnet 用户名 | coniadmin |
-| BACKUP_PASSWORD | 默认 Telnet 密码 | C0niC1Oud@auth |
-| BACKUP_THREAD_NUM | 并发线程数 | 10 |
+| CONFIG_BACKUP_ROOT | 数据根目录（configs、log、数据库等） | 项目内 `data/` |
+| DATABASE_URL | 数据库连接 | `sqlite:///config_backup.db`（相对项目目录） |
+| BACKUP_USERNAME | 默认 Telnet/SSH 用户名 | 见 config.py |
+| BACKUP_PASSWORD | 默认 Telnet/SSH 密码 | 见 config.py |
+| BACKUP_CONNECTION_TYPE | 默认连接方式 | `TELNET` 或 `SSH` |
+| BACKUP_THREAD_NUM | 备份并发线程数 | `10` |
+| SECRET_KEY | Flask 会话密钥 | 生产环境**必须**设置为随机字符串 |
 
-生产环境建议：
+生产环境示例：
 
 ```bash
-export CONFIG_BACKUP_ROOT=/home/config_backup
-export DATABASE_URL=sqlite:////home/config_backup/config_backup.db
+export CONFIG_BACKUP_ROOT=/opt/vconfig/data
+export DATABASE_URL=sqlite:////opt/vconfig/data/config_backup.db
+export SECRET_KEY=your-random-secret-key
 ```
 
-### 3. 初始化并导入设备
+### 4. 初始化数据库
 
 ```bash
-# 初始化数据库
 flask --app app init-db
-
-# 从 ip_list 导入设备（需在项目目录或 /home/config_backup 下存在 ip_list）
-flask --app app import-ip-list
 ```
 
-### 4. 启动
+### 5. 启动服务
 
-**开发：**
+**开发环境：**
 
 ```bash
 python app.py
@@ -57,46 +72,59 @@ python app.py
 flask --app app run --host 0.0.0.0 --port 5000
 ```
 
-**生产（gunicorn）：**
+**生产环境（推荐使用 Gunicorn）：**
 
 ```bash
 gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ```
 
-访问 `http://服务器IP:5000` 即可使用。
+访问 `http://<服务器IP>:5000`，使用初始化后的管理员账号登录（或通过「系统设置」创建用户）。
+
+### 6. 首次使用建议
+
+1. 登录后进入「系统设置」→「备份设置」，配置默认 Telnet/SSH 账号、超时、线程数等。
+2. 在「设备管理」中添加设备，或使用「批量导入」按「主机名 IP 设备类型 [分组]」格式导入。
+3. 在「执行备份」中执行全量备份或单台备份，在「备份日志」与「已备份配置」中查看结果。
+4. 可选：在「系统设置」中配置备份失败告警 Webhook、API Token、LDAP 等。
+
+---
 
 ## 目录结构
 
 ```
 config_backup_web/
-├── app.py           # Flask 应用
-├── config.py        # 配置
-├── models.py        # 数据模型
-├── backup_service.py# Telnet 备份逻辑
-├── ip_list          # 示例设备列表
+├── app.py              # Flask 应用入口与路由
+├── config.py            # 配置（数据目录、数据库、默认账号等）
+├── models.py            # 数据模型
+├── backup_service.py    # 备份执行逻辑（Telnet/SSH）
+├── compliance.py        # 合规检查
+├── device_drivers/      # 设备类型驱动（Cisco、Juniper 等）
 ├── requirements.txt
-├── templates/
-├── static/
-└── data/            # 数据目录（自动创建）
-    ├── configs/     # 备份的配置文件
-    ├── log/         # 日志
-    └── config_backup.db
+├── templates/           # 页面模板
+├── static/              # 前端静态资源
+├── run.sh / backup.sh   # 启动与备份脚本（可选）
+└── data/                # 数据目录（可由 CONFIG_BACKUP_ROOT 指定）
+    ├── configs/         # 备份的配置文件
+    ├── log/             # 日志
+    └── config_backup.db # SQLite 数据库（若使用默认 DATABASE_URL）
 ```
+
+---
 
 ## 定时备份
 
-在「系统设置」→「备份设置」中可配置自动备份频率，内置调度器会按设定时间自动执行备份，无需配置 crontab。支持：
-- 每天凌晨 02:00
-- 每周日凌晨 02:00
-- 每 12 小时（0 点和 12 点）
+在「系统设置」→「备份设置」中可配置自动备份频率，内置调度器按设定时间执行，无需单独配置 crontab。支持：
+
+- 每天凌晨 02:00  
+- 每周日凌晨 02:00  
+- 每 12 小时（0 点和 12 点）  
 - 自定义 Cron 表达式（如 `0 2 * * *` 表示每天 02:00）
 
-使用 gunicorn 多进程时，调度器在主进程中运行，不会重复触发。
+使用 Gunicorn 多进程时，调度器在主进程中运行，不会重复触发。
 
-## 从原 telneter.py 迁移
+---
 
-1. 将原 `ip_list` 复制到项目目录或 `/home/config_backup/`
-2. 执行 `flask --app app import-ip-list` 导入设备
-3. 在 Web 设置中配置 Telnet 账号
-4. 点击「立即备份」测试
-5. 原排除规则（OOB/4G/LTM/NTA/SSL）已保留在 `config.py` 的 `EXCLUDE_PATTERNS`
+## 文档与接口
+
+- **API 说明**：见 [API.md](API.md)，含认证方式、常用接口及备份失败 Webhook 格式。
+- **代码恢复**：见 [RESTORE.md](RESTORE.md)，用于从备份标签或提交恢复代码版本。

@@ -167,7 +167,7 @@ def _ensure_device_type_configs():
                     'driver_type': 'generic',
                     'backup_config': {
                         'init_commands': [],
-                        # 与 telneter.py 完全一致：含 "success\n"，结尾 output_success
+                        # 含 "success\n"，结尾 output_success
                         'backup_command': ':foreach i in=(:put[/export]&:put[:put (("output_").("success\n"))]) do={$i}',
                         'prompt': 'output_success'
                     },

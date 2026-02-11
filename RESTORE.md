@@ -1,4 +1,6 @@
-# 代码恢复指南
+# vConfig 代码恢复指南
+
+本文说明如何从 Git 备份标签或提交恢复 vConfig 代码版本。
 
 ## 一键恢复当前备份版本
 
@@ -54,7 +56,7 @@ git merge restore-backup
 
 1. **恢复前请先备份当前代码**：
    ```bash
-   cp -r . ../config_backup_web_backup_$(date +%Y%m%d)
+   cp -r . ../vconfig_backup_$(date +%Y%m%d)
    ```
 
 2. **恢复后需要重启服务**：
