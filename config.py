@@ -4,7 +4,7 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 数据目录 (可环境变量覆盖，生产环境建议 /home/config_backup)
+# 数据目录 (可环境变量覆盖，生产环境建议 /opt/vconfig/data)
 DATA_ROOT = os.environ.get('CONFIG_BACKUP_ROOT', os.path.join(BASE_DIR, 'data'))
 CONFIGS_DIR = os.path.join(DATA_ROOT, 'configs')
 LOG_DIR = os.path.join(DATA_ROOT, 'log')
@@ -13,7 +13,7 @@ CERTS_DIR = os.path.join(DATA_ROOT, 'certs')  # HTTPS 自签名证书目录
 # 数据库
 SQLALCHEMY_DATABASE_URI = os.environ.get(
     'DATABASE_URL',
-    f'sqlite:///{os.path.join(BASE_DIR, "config_backup.db")}'
+    f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
 )
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 

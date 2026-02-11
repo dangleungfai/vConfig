@@ -1,3 +1,5 @@
+# 系统依赖：必须安装 OpenSSL（用于 HTTPS 自签名证书）
+# 见 README 部署步骤 - 环境要求
 Flask>=2.3.0
 Flask-SQLAlchemy>=3.0.0
 Pillow>=9.0.0

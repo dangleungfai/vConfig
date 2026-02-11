@@ -4234,7 +4234,7 @@ def db_backup():
         return jsonify({'error': '当前使用非 SQLite 或数据库文件不存在，暂不支持备份。'}), 400
     dir_name = os.path.dirname(db_path)
     file_name = os.path.basename(db_path)
-    fn = 'config_backup_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
+    fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
     return send_from_directory(dir_name, file_name, as_attachment=True, attachment_filename=fn)
 
 
@@ -4790,7 +4790,7 @@ def import_ip_list():
     """从 ip_list 文件导入设备"""
     path = os.path.join(os.path.dirname(__file__), 'ip_list')
     if not os.path.exists(path):
-        path = '/home/config_backup/ip_list'
+        path = '/opt/vconfig/ip_list'
     if not os.path.exists(path):
         print('ip_list not found.')
         return

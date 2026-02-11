@@ -1,6 +1,6 @@
 // 配置备份 Web 管理 - 前端逻辑
 const API = '/api';
-const SETTINGS_DRAFT_KEY = 'config_backup_settings_draft';
+const SETTINGS_DRAFT_KEY = 'vconfig_settings_draft';
 
 function readSettingsDraft() {
     try {
@@ -303,7 +303,7 @@ function showTab(name) {
     const panel = document.getElementById(`panel-${name}`);
     if (tab) tab.classList.add('active');
     if (panel) panel.classList.add('active');
-    try { sessionStorage.setItem('config_backup_tab', name); } catch (e) {}
+    try { sessionStorage.setItem('vconfig_tab', name); } catch (e) {}
     // 切换 Tab 时同步地址栏 hash，避免从 #config-device/... 进入后点击其他菜单时 URL 不更新
     if (name !== 'config-device') {
         location.hash = name === 'dashboard' ? '' : name;
@@ -317,7 +317,7 @@ function showTab(name) {
     if (name === 'settings') {
         loadSettings();
         const savedSection = (function() {
-            try { return sessionStorage.getItem('config_backup_settings_section') || 'general'; }
+            try { return sessionStorage.getItem('vconfig_settings_section') || 'general'; }
             catch (e) { return 'general'; }
         })();
         showSettingsSection(savedSection);
@@ -335,7 +335,7 @@ document.body.addEventListener('click', e => {
         e.preventDefault();
         const panel = document.getElementById('panel-' + t.dataset.tab);
         if (!panel) {
-            try { sessionStorage.setItem('config_backup_tab', t.dataset.tab); } catch (_) {}
+            try { sessionStorage.setItem('vconfig_tab', t.dataset.tab); } catch (_) {}
             window.location.href = '/';
             return;
         }
@@ -945,7 +945,7 @@ document.getElementById('btn-modal-config-diff-close')?.addEventListener('click'
 });
 
 // 首页卡片拖拽排序（顺序持久化到 localStorage）
-const DASHBOARD_CARD_ORDER_KEY = 'config_backup_dashboard_card_order';
+const DASHBOARD_CARD_ORDER_KEY = 'vconfig_dashboard_card_order';
 
 function getDashboardCardOrder() {
     try {
@@ -1048,11 +1048,11 @@ function applyTheme(theme) {
     theme = theme || 'light';
     if (theme === 'apple') theme = 'light';
     document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('config_backup_theme', theme); } catch (e) {}
+    try { localStorage.setItem('vconfig_theme', theme); } catch (e) {}
 }
 function initTheme() {
     let theme = 'light';
-    try { theme = localStorage.getItem('config_backup_theme') || 'light'; } catch (e) {}
+    try { theme = localStorage.getItem('vconfig_theme') || 'light'; } catch (e) {}
     applyTheme(theme);
 }
 initTheme();
@@ -1128,13 +1128,13 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (_) { showTab('dashboard'); loadDashboard(); }
         } else {
             let tab = 'dashboard';
-            try { tab = sessionStorage.getItem('config_backup_tab') || 'dashboard'; } catch (e) {}
+            try { tab = sessionStorage.getItem('vconfig_tab') || 'dashboard'; } catch (e) {}
             const panel = document.getElementById('panel-' + tab);
             if (panel) showTab(tab); else loadDashboard();
         }
     } else {
         let tab = 'dashboard';
-        try { tab = sessionStorage.getItem('config_backup_tab') || 'dashboard'; } catch (e) {}
+        try { tab = sessionStorage.getItem('vconfig_tab') || 'dashboard'; } catch (e) {}
         const panel = document.getElementById('panel-' + tab);
         if (panel) showTab(tab); else loadDashboard();
     }
@@ -3220,7 +3220,7 @@ function openConfigDevicePanel(prefix, hostname) {
     const currentEl = document.getElementById('config-device-current-hostname');
     if (titleEl) titleEl.textContent = _configDeviceHostname;
     if (currentEl) currentEl.textContent = _configDeviceHostname;
-    try { sessionStorage.setItem('config_backup_tab', 'config-device'); } catch (_) {}
+    try { sessionStorage.setItem('vconfig_tab', 'config-device'); } catch (_) {}
     location.hash = '#config-device/' + encodeURIComponent(_configDevicePrefix) + '/' + encodeURIComponent(_configDeviceHostname);
     showTab('config-device');
     loadConfigDevicePanelData();
@@ -3236,7 +3236,7 @@ document.body.addEventListener('click', function(e) {
 document.getElementById('config-device-back')?.addEventListener('click', function(e) {
     e.preventDefault();
     location.hash = '';
-    try { sessionStorage.setItem('config_backup_tab', 'configs'); } catch (_) {}
+    try { sessionStorage.setItem('vconfig_tab', 'configs'); } catch (_) {}
     showTab('configs');
 });
 
@@ -4361,7 +4361,7 @@ document.querySelectorAll('.settings-nav-item')?.forEach(btn => {
     btn.addEventListener('click', () => {
         const name = btn.getAttribute('data-settings-section') || 'general';
         showSettingsSection(name);
-        try { sessionStorage.setItem('config_backup_settings_section', name); } catch (e) {}
+        try { sessionStorage.setItem('vconfig_settings_section', name); } catch (e) {}
         if (name === 'users') {
             loadUsers();
         } else if (name === 'device-types') {
