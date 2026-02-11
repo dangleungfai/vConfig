@@ -705,6 +705,40 @@ def _set_setting(key: str, value: str):
     db.session.commit()
 
 
+def _webhook_body_for_url(url: str, text: str, extra: dict = None) -> bytes:
+    """根据 Webhook URL 识别平台并生成对应请求体。支持：企业微信、钉钉、飞书、Slack、Discord、Teams 及通用 JSON。"""
+    import json as _json
+    u = url.lower()
+    # 企业微信：msgtype + text.content
+    if 'qyapi.weixin.qq.com' in u:
+        return _json.dumps({'msgtype': 'text', 'text': {'content': text}}, ensure_ascii=False).encode('utf-8')
+    # 钉钉：msgtype + text.content + at
+    if 'oapi.dingtalk.com' in u:
+        return _json.dumps({
+            'msgtype': 'text',
+            'text': {'content': text},
+            'at': {'isAtAll': False},
+        }, ensure_ascii=False).encode('utf-8')
+    # 飞书：msg_type + content.text
+    if 'open.feishu.cn' in u and '/bot/' in u:
+        return _json.dumps({'msg_type': 'text', 'content': {'text': text}}, ensure_ascii=False).encode('utf-8')
+    # Slack：text
+    if 'hooks.slack.com' in u:
+        return _json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')
+    # Discord：content（2k 字符限制）
+    if 'discord.com/api/webhooks' in u or 'discordapp.com/api/webhooks' in u:
+        return _json.dumps({'content': text[:2000]}, ensure_ascii=False).encode('utf-8')
+    # Microsoft Teams：text 或 MessageCard
+    if 'webhook.office.com' in u or 'outlook.office.com' in u:
+        return _json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')
+    # 通用：合并 extra 与 message/body
+    payload = dict(extra) if extra else {}
+    payload.setdefault('message', text)
+    payload.setdefault('body', text)
+    payload.setdefault('text', text)
+    return _json.dumps(payload, ensure_ascii=False).encode('utf-8')
+
+
 def _call_webhook_with_retry(url: str, body: bytes, max_retries: int = 3, timeout: int = 10):
     """调用 Webhook，失败时重试并写日志。成功返回 True，失败返回 False。HTTPS 请求跳过证书校验以兼容自签名/内网证书。"""
     import urllib.request
@@ -1882,8 +1916,12 @@ def device_detail(pk):
     if 'password' in data:
         dev.password = data['password'] if data['password'] else None
     if 'connection_type' in data:
-        ct = (data.get('connection_type') or '').strip().upper()
-        dev.connection_type = ct if ct in ('TELNET', 'SSH') else None
+        ct_raw = data.get('connection_type')
+        if ct_raw is None or (isinstance(ct_raw, str) and not ct_raw.strip()):
+            dev.connection_type = None
+        else:
+            ct = str(ct_raw).strip().upper()
+            dev.connection_type = ct if ct in ('TELNET', 'SSH') else None
     if 'group' in data:
         dev.device_group = (str(data.get('group') or '').strip())[:64] or None
     if 'maintenance_start' in data:
@@ -1906,6 +1944,15 @@ def device_detail(pk):
                 dev.telnet_port = max(1, min(65535, dev.telnet_port))
         except (TypeError, ValueError):
             dev.telnet_port = None
+    # 兼容部分环境下 ORM 未正确刷新 connection_type 的情况，直接执行一次 UPDATE
+    try:
+        from sqlalchemy import text as _sql_text
+        db.session.execute(
+            _sql_text("UPDATE devices SET connection_type = :ct WHERE id = :id"),
+            {"ct": dev.connection_type, "id": dev.id},
+        )
+    except Exception:
+        pass
     db.session.commit()
     _write_audit('update_device', resource_type='device', resource_id=str(dev.id), detail=f'hostname={dev.hostname}, ip={dev.ip}')
     return jsonify(dev.to_dict())
@@ -2794,15 +2841,20 @@ def _start_full_backup(run_type='manual', executor=''):
                 if job_to_save.get('fail', 0) > 0:
                     webhook = (_get_setting('backup_failure_webhook', '') or '').strip()
                     if webhook and webhook.startswith(('http://', 'https://')):
-                        import json as _json
-                        body = _json.dumps({
+                        total = job_to_save.get('total', 0)
+                        ok = job_to_save.get('ok', 0)
+                        fail = job_to_save.get('fail', 0)
+                        msg = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
+                            job_to_save.get('id', ''), total, ok, fail
+                        )
+                        body = _webhook_body_for_url(webhook, msg, {
                             'event': 'backup_failure',
                             'job_id': job_to_save.get('id'),
-                            'total': job_to_save.get('total'),
-                            'ok': job_to_save.get('ok'),
-                            'fail': job_to_save.get('fail'),
+                            'total': total,
+                            'ok': ok,
+                            'fail': fail,
                             'end_time': job_to_save.get('end_time'),
-                        }, ensure_ascii=False).encode('utf-8')
+                        })
                         _call_webhook_with_retry(webhook, body, max_retries=3)
             _cleanup_old_backups()
 
@@ -4141,20 +4193,9 @@ def test_webhook():
         return jsonify({'error': '请先填写 Webhook URL'}), 400
     if not url.startswith(('http://', 'https://')):
         return jsonify({'error': 'URL 须以 http:// 或 https:// 开头'}), 400
-    import json as _json
     import urllib.request
     import urllib.error
-    body = _json.dumps({
-        'event': 'backup_failure_test',
-        'test': True,
-        'message': '这是一条测试消息，用于验证 Webhook 是否正常接收。',
-        'body': '配置备份中心 Webhook 测试消息，发送时间：%s' % (datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + ' UTC'),
-        'job_id': 'test_' + (datetime.utcnow().isoformat() + 'Z').replace(':', '-').replace('.', '-'),
-        'total': 1,
-        'ok': 0,
-        'fail': 1,
-        'end_time': datetime.utcnow().isoformat() + 'Z',
-    }, ensure_ascii=False).encode('utf-8')
+    body = _webhook_body_for_url(url, 'Hello!!!')
     # 测试请求使用不验证 SSL 证书的 context，兼容自签名/内网证书
     import ssl
     ssl_ctx = ssl.create_default_context()
@@ -4164,21 +4205,114 @@ def test_webhook():
         req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json; charset=utf-8'})
         resp = urllib.request.urlopen(req, timeout=10, context=ssl_ctx)
         status = resp.getcode() if hasattr(resp, 'getcode') else 200
-        return jsonify({'ok': True, 'status': status})
+        app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, status)
+        return jsonify({'ok': True, 'status': status, 'message': '已发送测试消息 Hello!!! 至 Webhook，HTTP %d' % status})
     except urllib.error.HTTPError as e:
         # 对方返回 4xx/5xx 仍视为 URL 可达、请求已送达
+        app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, e.code)
         return jsonify({'ok': True, 'status': e.code, 'message': '请求已送达，接收方返回 HTTP %d' % e.code})
     except urllib.error.URLError as e:
         reason = str(e.reason) if e.reason else str(e)
+        app.logger.warning('Webhook 测试请求失败: url=%s, reason=%s', url, reason)
         if 'timed out' in reason.lower() or 'timeout' in reason.lower():
-            return jsonify({'error': '连接超时，请检查 URL 及服务器网络/防火墙是否允许出站访问。'}), 502
+            return jsonify({'error': '连接超时。测试请求由 vConfig 所在服务器发出，请确保 Webhook URL 可从该服务器访问（勿填仅本机可用的地址如 localhost）。'}), 502
         if 'certificate' in reason.lower() or 'ssl' in reason.lower():
             return jsonify({'error': 'SSL 证书验证失败：%s' % reason}), 502
         if 'connection refused' in reason.lower() or 'refused' in reason.lower():
-            return jsonify({'error': '连接被拒绝，请确认目标服务已启动且端口正确。'}), 502
-        return jsonify({'error': '无法连接：%s' % reason}), 502
+            return jsonify({'error': '连接被拒绝。测试请求由 vConfig 所在服务器发出，请确保 URL 可从服务器访问且服务已启动。'}), 502
+        return jsonify({'error': '无法连接：%s。提示：测试由服务器发起，Webhook URL 须在服务器侧可访问。' % reason}), 502
     except Exception as e:
+        app.logger.warning('Webhook 测试请求异常: url=%s, err=%s', url, e)
         return jsonify({'error': '请求失败：%s' % (str(e) or '未知错误')}), 502
+
+
+def _validate_pem_cert(data: bytes) -> bool:
+    """校验是否为有效 PEM 证书格式"""
+    try:
+        text = data.decode('utf-8', errors='ignore')
+        return '-----BEGIN CERTIFICATE-----' in text and '-----END CERTIFICATE-----' in text
+    except Exception:
+        return False
+
+
+def _validate_pem_key(data: bytes) -> bool:
+    """校验是否为有效 PEM 私钥格式"""
+    try:
+        text = data.decode('utf-8', errors='ignore')
+        if '-----BEGIN PRIVATE KEY-----' in text and '-----END PRIVATE KEY-----' in text:
+            return True
+        if '-----BEGIN RSA PRIVATE KEY-----' in text and '-----END RSA PRIVATE KEY-----' in text:
+            return True
+        if '-----BEGIN EC PRIVATE KEY-----' in text and '-----END EC PRIVATE KEY-----' in text:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+@app.route('/api/settings/upload-ssl-cert', methods=['POST'])
+def upload_ssl_cert():
+    """用户上传自有域名证书（cert.pem + key.pem）"""
+    if not _can_edit_settings():
+        return jsonify({'error': '当前账号无权修改全局设置。'}), 403
+    cert_f = request.files.get('cert')
+    key_f = request.files.get('key')
+    if not cert_f or not cert_f.filename:
+        return jsonify({'error': '请选择证书文件（.crt 或 .pem）'}), 400
+    if not key_f or not key_f.filename:
+        return jsonify({'error': '请选择私钥文件（.key 或 .pem）'}), 400
+    try:
+        cert_data = cert_f.read()
+        key_data = key_f.read()
+    except Exception as e:
+        return jsonify({'error': '读取文件失败：%s' % str(e)}), 400
+    if len(cert_data) < 50 or len(key_data) < 50:
+        return jsonify({'error': '证书或私钥文件内容过短，请检查文件是否正确。'}), 400
+    if not _validate_pem_cert(cert_data):
+        return jsonify({'error': '证书格式无效，应为 PEM 格式（含 -----BEGIN CERTIFICATE-----）。'}), 400
+    if not _validate_pem_key(key_data):
+        return jsonify({'error': '私钥格式无效，应为 PEM 格式（含 -----BEGIN PRIVATE KEY----- 或 -----BEGIN RSA PRIVATE KEY-----）。'}), 400
+    cert_file = os.path.join(CERTS_DIR, 'cert.pem')
+    key_file = os.path.join(CERTS_DIR, 'key.pem')
+    os.makedirs(CERTS_DIR, mode=0o700, exist_ok=True)
+    try:
+        with open(cert_file, 'wb') as f:
+            f.write(cert_data)
+        with open(key_file, 'wb') as f:
+            f.write(key_data)
+        _write_audit('upload_ssl_cert', resource_type='settings', resource_id='', detail='SSL cert uploaded by user')
+        return jsonify({'ok': True, 'message': '证书已上传，请重启服务后生效。'})
+    except Exception as e:
+        return jsonify({'error': '保存证书失败：%s' % str(e)}), 500
+
+
+@app.route('/api/settings/update-ssl-cert', methods=['POST'])
+def update_ssl_cert():
+    """用户自助更新 HTTPS 自签名证书，删除旧证书并重新生成（有效期 100 年）"""
+    if not _can_edit_settings():
+        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
+    cert_file = os.path.join(CERTS_DIR, 'cert.pem')
+    key_file = os.path.join(CERTS_DIR, 'key.pem')
+    for f in (cert_file, key_file):
+        if os.path.isfile(f):
+            try:
+                os.unlink(f)
+            except OSError as e:
+                return jsonify({'error': '删除旧证书失败：%s' % str(e)}), 500
+    os.makedirs(CERTS_DIR, mode=0o700, exist_ok=True)
+    import subprocess
+    cmd = [
+        'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
+        '-keyout', key_file, '-out', cert_file,
+        '-days', '36500', '-nodes',
+        '-subj', '/CN=localhost/O=vConfig/C=CN',
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        _write_audit('update_ssl_cert', resource_type='settings', resource_id='', detail='SSL cert regenerated')
+        return jsonify({'ok': True, 'message': 'SSL 证书已重新生成，请重启服务后生效。'})
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return jsonify({'error': '生成证书失败（需安装 openssl）：%s' % str(e)}), 500
 
 
 @app.route('/api/settings/restart', methods=['POST'])
@@ -4933,6 +5067,48 @@ def _ensure_ssl_certs():
         return None
 
 
+def _start_http_redirect_server(host: str, https_port: int = 443):
+    """在端口 80 启动 HTTP 服务，将请求 301 重定向到 HTTPS"""
+    import http.server
+    import socketserver
+
+    class RedirectHandler(http.server.BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def do_GET(self):
+            self._redirect()
+
+        def do_POST(self):
+            self._redirect()
+
+        def do_HEAD(self):
+            self._redirect()
+
+        def do_OPTIONS(self):
+            self._redirect()
+
+        def _redirect(self):
+            host_header = self.headers.get('Host', '').split(':')[0] or 'localhost'
+            path = self.path or '/'
+            if path.startswith('//'):
+                path = '/' + path.lstrip('/')
+            url = 'https://%s:%s%s' % (host_header, https_port, path)
+            self.send_response(301)
+            self.send_header('Location', url)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            app.logger.debug('HTTP redirect: %s', args[0] if args else '')
+
+    try:
+        with socketserver.TCPServer((host, 80), RedirectHandler) as httpd:
+            app.logger.info('HTTP 端口 80 已启动，将自动重定向到 HTTPS')
+            httpd.serve_forever()
+    except OSError as e:
+        app.logger.warning('HTTP 80 端口监听失败（需 root 或端口被占用）: %s，可设置 FLASK_HTTP_REDIRECT=0 禁用', e)
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
@@ -4945,13 +5121,17 @@ if __name__ == '__main__':
     debug = os.environ.get('FLASK_DEBUG', '1') == '1'
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     use_https = os.environ.get('FLASK_HTTPS', '1') == '1'
+    http_redirect = os.environ.get('FLASK_HTTP_REDIRECT', '1') == '1'
     port = int(os.environ.get('FLASK_PORT', '443' if use_https else '80'))
     ssl_context = None
     if use_https:
         certs = _ensure_ssl_certs()
         if certs:
             ssl_context = certs
-            app.logger.info('HTTPS 模式：使用自签名证书 %s', certs[0])
+            app.logger.info('HTTPS 模式：使用证书 %s', certs[0])
+            if http_redirect:
+                t = threading.Thread(target=_start_http_redirect_server, args=(host, port), daemon=True)
+                t.start()
         else:
             use_https = False
             port = 80 if port == 443 else port

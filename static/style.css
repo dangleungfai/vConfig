@@ -284,7 +284,8 @@ a:hover { color: var(--primary-hover); }
 .panel.active { display: block; }
 .panel-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .filters-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.filters-bar input[type="text"] { width: 160px; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.filters-bar input[type="text"] { width: 160px; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem; min-height: 2rem; box-sizing: border-box; }
+.filters-bar select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem; min-height: 2rem; box-sizing: border-box; }
 .toolbar-sep { color: var(--text-muted); margin: 0 0.25rem; }
 
 /* 仪表盘 - Apple 风格：大标题、留白、轻卡片 */
@@ -374,11 +375,14 @@ a:hover { color: var(--primary-hover); }
     color: var(--text-muted);
 }
 .backup-jobs-toolbar select {
-    padding: 0.25rem 0.5rem;
+    padding: 0.35rem 0.5rem;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);
+    font-size: 0.875rem;
+    min-height: 2rem;
+    box-sizing: border-box;
 }
 .backup-jobs-toolbar .pagination-info {
     margin-left: auto;
@@ -1079,7 +1083,7 @@ a:hover { color: var(--primary-hover); }
 .btn-eye { padding: 0.4rem 0.5rem; min-width: 2.2rem; background: var(--border); color: var(--text); border-radius: 6px; cursor: pointer; border: 1px solid var(--border); font-size: 1rem; }
 .btn-eye:hover { background: #3d4a5c; }
 .devices-toolbar { margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; }
-.devices-toolbar select { padding: 0.25rem 0.5rem; }
+.devices-toolbar select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem; min-height: 2rem; box-sizing: border-box; }
 .col-check { width: 2.5rem; text-align: center; }
 .col-actions { min-width: 320px; }
 .table-resizable { overflow-x: auto; }
@@ -1104,7 +1108,12 @@ a:hover { color: var(--primary-hover); }
 .table .status-ok { color: var(--success); }
 .table .status-fail { color: var(--error); }
 
-/* 设备类型管理表：操作列加宽并禁止换行，避免按钮被挤成多行 */
+/* 设备类型管理表：字号与内边距与整体协调，操作列加宽并禁止换行 */
+#device-type-table th,
+#device-type-table td {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+}
 #device-type-table th:last-child,
 #device-type-table td:last-child {
     white-space: nowrap;
@@ -1422,8 +1431,42 @@ a:hover { color: var(--primary-hover); }
     display: block;
 }
 
+/* 系统设置整体排版：统一各区域字体层级 */
+#panel-settings {
+    font-size: 0.875rem; /* 基础正文字号 */
+}
+#panel-settings .settings-subtitle {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+#panel-settings .form-row label {
+    font-size: 0.9rem;           /* 字段名称区 */
+}
+#panel-settings .form-hint,
+#panel-settings .hint {
+    font-size: 0.8rem;           /* 字段描述/说明区 */
+    color: var(--text-muted);
+}
+#panel-settings .form-row input,
+#panel-settings .form-row select {
+    font-size: 0.875rem;         /* 用户输入区 */
+}
+#panel-settings .table th,
+#panel-settings .table td {
+    font-size: 0.8125rem;        /* 列表区 */
+    padding: 0.5rem 0.75rem;
+}
+
 .user-list-toolbar {
     margin-bottom: 0.75rem;
+}
+/* 用户列表表格：与整体设置区字号统一，表体与表头一致，略收紧内边距 */
+#settings-section-users .table th,
+#settings-section-users .table td {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
 }
 
 .ldap-test-row {
@@ -1623,6 +1666,16 @@ a:hover { color: var(--primary-hover); }
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+.devices-footer .per-page select {
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.8125rem;
+    min-height: 2rem;
+    box-sizing: border-box;
+}
 
 .config-tree {
     background: var(--bg-card);
@@ -1682,6 +1735,9 @@ a:hover { color: var(--primary-hover); }
     background: var(--bg-card);
     color: var(--text);
     min-width: 180px;
+    min-height: 2rem;
+    font-size: 0.875rem;
+    box-sizing: border-box;
 }
 .config-pagination-info { margin-left: 0.25rem; font-weight: 500; }
 .config-toolbar-sep { margin: 0 0.5rem; opacity: 0.6; color: var(--text-muted); }

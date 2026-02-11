@@ -309,7 +309,7 @@ function showTab(name) {
         location.hash = name === 'dashboard' ? '' : name;
     }
     if (name === 'dashboard') loadDashboard();
-    if (name === 'devices') { loadDeviceSites(); loadDevices(); refreshDeviceTypeOptions().catch(() => {}); }
+    if (name === 'devices') { loadDevices(); refreshDeviceTypeOptions().catch(() => {}); }
     if (name === 'backup') loadBackupStatus();
     if (name === 'logs') loadLogs();
     if (name === 'configs') loadConfigs();
@@ -1655,14 +1655,8 @@ let deviceSortDir = 'asc';
 async function loadDevices(noCache) {
     const perPageEl = document.getElementById('device-per-page');
     if (perPageEl) devicePerPage = parseInt(perPageEl.value, 10) || 50;
-    const site = document.getElementById('filter-site')?.value || '';
-    const devType = document.getElementById('filter-device-type')?.value || '';
-    const group = document.getElementById('filter-group')?.value || '';
     const search = document.getElementById('filter-search')?.value?.trim() || '';
     let url = `${API}/devices?page=${devicePage}&per_page=${devicePerPage}`;
-    if (site) url += '&site=' + encodeURIComponent(site);
-    if (devType) url += '&device_type=' + encodeURIComponent(devType);
-    if (group) url += '&group=' + encodeURIComponent(group);
     if (search) url += '&search=' + encodeURIComponent(search);
     if (deviceSortBy) {
         url += `&sort_by=${encodeURIComponent(deviceSortBy)}&sort_dir=${encodeURIComponent(deviceSortDir || 'asc')}`;
@@ -1691,12 +1685,6 @@ async function loadDevices(noCache) {
     try { window.DEFAULT_CONN_TYPE = defaultConn; } catch (_) {}
     const connLabel = (c) => ((c && c !== '') ? c : defaultConn) === 'SSH' ? 'SSH' : 'Telnet';
     const groups = data.groups || [];
-    const groupSel = document.getElementById('filter-group');
-    if (groupSel && groups.length >= 0) {
-        const cur = groupSel.value;
-        groupSel.innerHTML = '<option value="">全部</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-        if (groups.indexOf(cur) !== -1) groupSel.value = cur;
-    }
     const groupListEl = document.getElementById('device-group-list');
     if (groupListEl) groupListEl.innerHTML = groups.map(g => `<option value="${escapeHtml(g)}">`).join('');
     tbody.innerHTML = list.map(d => `
@@ -1765,9 +1753,6 @@ document.getElementById('device-per-page')?.addEventListener('change', () => { d
 document.getElementById('btn-device-search')?.addEventListener('click', () => { devicePage = 1; loadDevices(); });
 document.getElementById('filter-search')?.addEventListener('keypress', e => { if (e.key === 'Enter') { devicePage = 1; loadDevices(); } });
 document.getElementById('filter-search')?.addEventListener('input', debounce(() => { devicePage = 1; loadDevices(); }, 350));
-document.getElementById('filter-site')?.addEventListener('change', () => { devicePage = 1; loadDevices(); });
-document.getElementById('filter-device-type')?.addEventListener('change', () => { devicePage = 1; loadDevices(); });
-document.getElementById('filter-group')?.addEventListener('change', () => { devicePage = 1; loadDevices(); });
 
 // 设备列表列头排序
 function setDeviceSort(by) {
@@ -1802,16 +1787,6 @@ document.querySelectorAll('.device-sort-btn').forEach(btn => {
     });
 });
 
-async function loadDeviceSites() {
-    const res = await fetch(`${API}/devices/sites`);
-    const data = await res.json();
-    const sites = data.sites || [];
-    const sel = document.getElementById('filter-site');
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">全部</option>' + sites.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-    if (cur) sel.value = cur;
-}
 document.getElementById('btn-export-csv')?.addEventListener('click', () => {
     window.open(`${API}/devices/export`, '_blank');
     toast('已发起导出', 'success');
@@ -2582,7 +2557,6 @@ document.getElementById('btn-modal-cancel').addEventListener('click', () => {
 });
 
 document.getElementById('btn-modal-save').addEventListener('click', async () => {
-    const connVal = document.getElementById('device-connection-type').value.trim();
     const sshPortRaw = (document.getElementById('device-ssh-port')?.value || '').trim();
     const telnetPortRaw = (document.getElementById('device-telnet-port')?.value || '').trim();
     let sshPort = null;
@@ -2595,12 +2569,16 @@ document.getElementById('btn-modal-save').addEventListener('click', async () => 
         const n = parseInt(telnetPortRaw, 10);
         if (!isNaN(n) && n >= 1 && n <= 65535) telnetPort = n;
     }
+    const connectionTypeSelect = document.getElementById('device-connection-type');
+    const connectionTypeVal = connectionTypeSelect ? (connectionTypeSelect.value || '').trim() : '';
+    // 确保 connection_type 字段始终被发送（空字符串转为 null，非空则发送原值）
+    const connectionTypeToSend = connectionTypeVal ? connectionTypeVal : null;
     const data = {
         ip: document.getElementById('device-ip').value.trim(),
         hostname: document.getElementById('device-hostname').value.trim(),
         device_type: document.getElementById('device-type').value,
         group: document.getElementById('device-group')?.value.trim() || null,
-        connection_type: connVal || null,
+        connection_type: connectionTypeToSend,
         ssh_port: sshPort,
         telnet_port: telnetPort,
         enabled: document.getElementById('device-enabled').checked,
@@ -2612,10 +2590,10 @@ document.getElementById('btn-modal-save').addEventListener('click', async () => 
         return;
     }
     const idForPut = editingId != null && editingId !== '' && !isNaN(Number(editingId)) ? Number(editingId) : null;
-    // 单设备编辑走批量更新接口，与「批量编辑」同一后端路径，避免 PUT 请求体未生效等问题
-    const url = idForPut ? `${API}/devices/batch-update` : `${API}/devices`;
-    const method = 'POST';
-    const payload = idForPut ? { ids: [idForPut], ...data } : data;
+    // 单设备编辑使用 PUT /api/devices/:id，保证所有字段正确落库
+    const url = idForPut ? `${API}/devices/${idForPut}` : `${API}/devices`;
+    const method = idForPut ? 'PUT' : 'POST';
+    const payload = data;
     try {
         const res = await fetch(url, {
             method,
@@ -3032,12 +3010,10 @@ let logSortBy = 'created_at';
 let logSortDir = 'desc';
 async function loadLogs() {
     const hostname = document.getElementById('log-hostname').value;
-    const status = document.getElementById('log-status').value;
     const perPageEl = document.getElementById('log-per-page');
     if (perPageEl) logPerPage = parseInt(perPageEl.value, 10) || 50;
     let url = `${API}/logs?page=${logPage}&per_page=${logPerPage}&sort_by=${encodeURIComponent(logSortBy)}&sort_dir=${encodeURIComponent(logSortDir)}`;
     if (hostname) url += `&hostname=${encodeURIComponent(hostname)}`;
-    if (status) url += `&status=${encodeURIComponent(status)}`;
     const res = await fetch(url);
     const data = await res.json();
     const tz = data.timezone || 'Asia/Shanghai';
@@ -3100,7 +3076,6 @@ function updateLogSortUI(currentBy, currentDir) {
 document.getElementById('btn-refresh-logs').addEventListener('click', () => { logPage = 1; loadLogs(); });
 document.getElementById('log-hostname').addEventListener('keypress', e => { if (e.key === 'Enter') loadLogs(); });
 document.getElementById('log-hostname').addEventListener('input', debounce(() => { logPage = 1; loadLogs(); }, 350));
-document.getElementById('log-status').addEventListener('change', () => { logPage = 1; loadLogs(); });
 document.getElementById('log-per-page')?.addEventListener('change', () => { logPage = 1; loadLogs(); });
 document.querySelectorAll('.log-sort-btn').forEach(btn => {
     btn.addEventListener('click', () => setLogSort(btn.getAttribute('data-sort-by')));
@@ -4032,8 +4007,12 @@ async function loadSettings() {
             'ldap-test-username',
             'ldap-test-password',
             'setting-logo-file',
+            'ssl-cert-file',
+            'ssl-key-file',
             'btn-logo-upload',
             'btn-logo-reset',
+            'btn-upload-ssl-cert',
+            'btn-update-ssl-cert',
             'btn-reset-settings-defaults',
             'btn-restart-service',
             'btn-db-backup',
@@ -4221,6 +4200,58 @@ document.getElementById('btn-logo-reset')?.addEventListener('click', async () =>
         toast('重置 Logo 失败，请检查网络后重试。', 'error');
     }
 });
+
+document.getElementById('btn-upload-ssl-cert')?.addEventListener('click', async () => {
+    const certInput = document.getElementById('ssl-cert-file');
+    const keyInput = document.getElementById('ssl-key-file');
+    if (!certInput?.files?.length || !keyInput?.files?.length) {
+        toast('请先选择证书文件和私钥文件', 'error');
+        return;
+    }
+    const formData = new FormData();
+    formData.append('cert', certInput.files[0]);
+    formData.append('key', keyInput.files[0]);
+    const btn = document.getElementById('btn-upload-ssl-cert');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch(`${API}/settings/upload-ssl-cert`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+            toast(data.message || '证书已上传，请重启服务后生效。', 'success');
+            if (certInput) certInput.value = '';
+            if (keyInput) keyInput.value = '';
+        } else {
+            toast(data.error || '上传证书失败', 'error');
+        }
+    } catch (e) {
+        toast('请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+});
+
+document.getElementById('btn-update-ssl-cert')?.addEventListener('click', async () => {
+    if (!confirm('确定要重新生成 HTTPS 自签名证书吗？旧证书将被替换，重启服务后生效。')) return;
+    const btn = document.getElementById('btn-update-ssl-cert');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch(`${API}/settings/update-ssl-cert`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+            toast(data.message || 'SSL 证书已重新生成，请重启服务后生效。', 'success');
+        } else {
+            toast(data.error || '更新证书失败', 'error');
+        }
+    } catch (e) {
+        toast('请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+});
+
 // 密码显示/隐藏
 document.getElementById('btn-toggle-password').addEventListener('click', function() {
     const input = document.getElementById('setting-password');

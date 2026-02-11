@@ -156,23 +156,6 @@
         </div>
     </header>
     <div class="devices-toolbar filters-bar">
-        <span>站点</span>
-        <select id="filter-site">
-            <option value="">全部</option>
-        </select>
-        <span>类型</span>
-        <select id="filter-device-type">
-            <option value="">全部</option>
-            <option value="Cisco">Cisco</option>
-            <option value="Juniper">Juniper</option>
-            <option value="Huawei">Huawei</option>
-            <option value="H3C">H3C</option>
-            <option value="RouterOS">RouterOS</option>
-        </select>
-        <span>分组</span>
-        <select id="filter-group">
-            <option value="">全部</option>
-        </select>
         <input type="text" id="filter-search" placeholder="搜索 IP / 主机名">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-device-search">搜索</button>
     </div>
@@ -288,14 +271,6 @@
         <h2>备份日志</h2>
     </header>
     <div class="devices-toolbar filters-bar">
-        <span>状态</span>
-        <select id="log-status">
-            <option value="">全部状态</option>
-            <option value="OK">OK</option>
-            <option value="Fail_Network">Fail_Network</option>
-            <option value="Fail_Login">Fail_Login</option>
-            <option value="Fail">Fail</option>
-        </select>
         <input type="text" id="log-hostname" placeholder="搜索 主机名">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs">搜索</button>
     </div>
@@ -590,6 +565,18 @@
                         </div>
                         <span class="form-hint">Logo 最大尺寸 64×64 像素：上传图片在范围内保持原尺寸，超过则按比例缩小到 64×64 以内（不拉伸）。支持 PNG/JPG/GIF/WebP/ICO，单文件 512KB 以内。</span>
                     </div>
+                    <div class="form-row">
+                        <label>HTTPS 证书</label>
+                        <div class="form-row-inline" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span>证书文件</span><input type="file" id="ssl-cert-file" accept=".crt,.pem,.cer" title="上传 SSL/TLS 域名证书，PEM 格式（含 -----BEGIN CERTIFICATE-----），支持 .crt / .pem / .cer"></span>
+                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span>私钥文件</span><input type="file" id="ssl-key-file" accept=".key,.pem" title="上传与证书配对的私钥，PEM 格式（含 -----BEGIN PRIVATE KEY----- 或 -----BEGIN RSA PRIVATE KEY-----），支持 .key / .pem"></span>
+                        </div>
+                        <div class="form-row-inline" style="margin-top: 0.5rem;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-ssl-cert">上传域名证书</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-update-ssl-cert" title="重新生成自签名证书（有效期 100 年）">重新生成自签名</button>
+                        </div>
+                        <span class="form-hint">证书类型：SSL/TLS 域名证书（含证书链亦可）。格式：PEM（含 -----BEGIN CERTIFICATE-----）；私钥为 PEM（含 -----BEGIN PRIVATE KEY----- 或 -----BEGIN RSA PRIVATE KEY-----）。上传或重新生成后需重启服务生效。</span>
+                    </div>
                 </section>
 
                 <!-- 自动发现（SNMP + 规则） -->
@@ -870,7 +857,7 @@
                             <input type="text" id="setting-backup-failure-webhook" placeholder="https://... 留空不告警" style="flex: 1; min-width: 200px;">
                             <button type="button" class="btn btn-secondary btn-sm" id="btn-test-webhook" title="发送一条测试告警以验证 Webhook 是否可达">测试</button>
                         </div>
-                        <span class="form-hint">备份任务结束后若有失败设备，将 POST JSON 到该 URL（失败时自动重试 3 次）</span>
+                        <span class="form-hint">备份任务结束后若有失败设备，将 POST 到该 URL（失败自动重试 3 次）。已按 URL 自动适配：企业微信、钉钉、飞书、Slack、Discord、Microsoft Teams 等；其他 URL 发送通用 JSON。测试由 vConfig 所在服务器发起，请填服务器可访问的地址。</span>
                     </div>
                     <div class="form-row">
                         <label>API Token（多个用英文逗号分隔）</label>

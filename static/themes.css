@@ -23,6 +23,46 @@
 [data-theme="dark"] .tab { color: var(--text-muted); }
 [data-theme="dark"] .tab.active { color: var(--text); background: var(--border); }
 [data-theme="dark"] .tab.active:hover { color: var(--text); }
+/* 深色主题：上传文件控件与次要按钮可读、协调 */
+[data-theme="dark"] input[type="file"] {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+[data-theme="dark"] input[type="file"]::file-selector-button,
+[data-theme="dark"] input[type="file"]::-webkit-file-upload-button {
+    background: var(--border);
+    color: var(--text);
+    border: none;
+    padding: 0.35rem 0.6rem;
+    margin-right: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+[data-theme="dark"] .btn-secondary {
+    background: #1e2d47;
+    color: #e8f0ff;
+    border: 1px solid #243552;
+}
+[data-theme="dark"] .btn-secondary:hover {
+    background: #243552;
+    color: #e8f0ff;
+}
+/* 深色主题：筛选栏、每页条数的输入框/下拉与整体协调 */
+[data-theme="dark"] .filters-bar input[type="text"],
+[data-theme="dark"] .filters-bar select,
+[data-theme="dark"] .devices-footer .per-page select,
+[data-theme="dark"] .devices-toolbar select,
+[data-theme="dark"] .config-devices-toolbar input[type="text"],
+[data-theme="dark"] .config-devices-toolbar select,
+[data-theme="dark"] .backup-jobs-toolbar select {
+    background: #141e32;
+    color: #e8f0ff;
+    border: 1px solid #243552;
+}
+[data-theme="dark"] .filters-bar input[type="text"]::placeholder {
+    color: #7f8fb0;
+}
 
 /* 浅色 · 专业（与 Apple 接近，偏灰） */
 [data-theme="light"] {
@@ -69,6 +109,19 @@
 [data-theme="blue"] .stat-card.stat-success { border-left-color: var(--success); }
 [data-theme="blue"] .stat-card.stat-danger { border-left-color: var(--error); }
 [data-theme="blue"] .stat-card.stat-warn { border-left-color: var(--warn); }
+[data-theme="blue"] input[type="file"] { background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); }
+[data-theme="blue"] input[type="file"]::file-selector-button,
+[data-theme="blue"] input[type="file"]::-webkit-file-upload-button { background: var(--border); color: var(--text); border: none; padding: 0.35rem 0.6rem; margin-right: 0.5rem; border-radius: 4px; cursor: pointer; }
+[data-theme="blue"] .btn-secondary { background: #1a3250; color: #e8f4fc; border: 1px solid var(--border); }
+[data-theme="blue"] .btn-secondary:hover { background: var(--border); color: #e8f4fc; }
+[data-theme="blue"] .filters-bar input[type="text"],
+[data-theme="blue"] .filters-bar select,
+[data-theme="blue"] .devices-footer .per-page select,
+[data-theme="blue"] .devices-toolbar select,
+[data-theme="blue"] .config-devices-toolbar input[type="text"],
+[data-theme="blue"] .config-devices-toolbar select,
+[data-theme="blue"] .backup-jobs-toolbar select { background: #16324c; color: #e8f4fc; border: 1px solid #1e4976; }
+[data-theme="blue"] .filters-bar input[type="text"]::placeholder { color: #7eb8e8; }
 
 /* 深蓝 · 运维 */
 [data-theme="navy"] {
@@ -98,3 +151,16 @@
 [data-theme="navy"] .tab.active { background: var(--border); color: var(--text); }
 [data-theme="navy"] .tab.active:hover { color: var(--text); }
 [data-theme="navy"] .btn-primary { background: linear-gradient(135deg, #3a86ff 0%, #4cc9f0 100%); }
+[data-theme="navy"] input[type="file"] { background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); }
+[data-theme="navy"] input[type="file"]::file-selector-button,
+[data-theme="navy"] input[type="file"]::-webkit-file-upload-button { background: var(--border); color: var(--text); border: none; padding: 0.35rem 0.6rem; margin-right: 0.5rem; border-radius: 4px; cursor: pointer; }
+[data-theme="navy"] .btn-secondary { background: #253549; color: #e0e1dd; border: 1px solid var(--border); }
+[data-theme="navy"] .btn-secondary:hover { background: var(--border); color: #e0e1dd; }
+[data-theme="navy"] .filters-bar input[type="text"],
+[data-theme="navy"] .filters-bar select,
+[data-theme="navy"] .devices-footer .per-page select,
+[data-theme="navy"] .devices-toolbar select,
+[data-theme="navy"] .config-devices-toolbar input[type="text"],
+[data-theme="navy"] .config-devices-toolbar select,
+[data-theme="navy"] .backup-jobs-toolbar select { background: #253549; color: #e0e1dd; border: 1px solid #415a77; }
+[data-theme="navy"] .filters-bar input[type="text"]::placeholder { color: #778da9; }

@@ -180,6 +180,13 @@ RUN_USER="${SUDO_USER:-$USER}"
 if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
     RUN_USER="root"
 fi
+# 若用 sudo 部署，确保数据库与数据目录归运行用户所有，否则服务启动后无法读写
+if [ "$(id -u)" = "0" ] && [ "$RUN_USER" != "root" ]; then
+    echo "修正数据文件归属为 $RUN_USER..."
+    for f in vconfig.db config_backup.db data venv; do
+        [ -e "$SCRIPT_DIR/$f" ] && chown -R "$RUN_USER" "$SCRIPT_DIR/$f" 2>/dev/null || true
+    done
+fi
 if command -v systemctl &>/dev/null && [ -d /etc/systemd/system ]; then
     sed -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
         -e "s|{{PORT}}|${PORT}|g" \
