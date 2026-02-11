@@ -764,11 +764,13 @@ def _call_webhook_with_retry(url: str, body: bytes, max_retries: int = 3, timeou
 def _get_default_settings():
     """返回系统默认参数（与 config 及界面默认一致）"""
     return {
-        'username': DEFAULT_USERNAME,
-        'password': DEFAULT_PASSWORD,
+        'username': '',
+        'password': '',
         'system_name': '配置备份中心',
-        'backup_frequency': '',
-        'default_connection_type': (DEFAULT_CONNECTION_TYPE or 'TELNET').upper(),
+        # 自动备份频率：默认每天凌晨 02:00
+        'backup_frequency': 'daily',
+        # 默认连接方式：SSH
+        'default_connection_type': (DEFAULT_CONNECTION_TYPE or 'SSH').upper(),
         'backup_retention_days': str(BACKUP_RETENTION_DAYS),
         'timezone': DEFAULT_TIMEZONE or 'Asia/Shanghai',
         'footer_text': '',
@@ -784,6 +786,7 @@ def _get_default_settings():
         'device_per_page_default': '50',
         'log_per_page_default': '50',
         'backup_timeout_seconds': '30',
+        # 备份并发线程数：默认 5
         'backup_thread_num': str(BACKUP_THREAD_NUM),
         'ssh_port': str(SSH_PORT),
         'telnet_port': '23',
@@ -801,6 +804,8 @@ def _get_default_settings():
         'snmp_community': 'public',
         'snmp_timeout_ms': '2000',
         'snmp_retries': '1',
+        # 自动发现频率：默认每 12 小时（0 点和 12 点）
+        'discovery_frequency': 'twice_daily',
     }
 
 
@@ -3677,11 +3682,12 @@ def get_settings():
         ])
 
     return jsonify({
-        'username': _get_setting('username', DEFAULT_USERNAME),
-        'password': _get_setting('password', DEFAULT_PASSWORD),
+        # 全局 Telnet/SSH 账号默认留空，仅从设置中读取
+        'username': _get_setting('username', ''),
+        'password': _get_setting('password', ''),
         'system_name': _get_setting('system_name', '配置备份中心'),
-        'backup_frequency': _get_setting('backup_frequency', ''),
-        'default_connection_type': _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'TELNET',
+        'backup_frequency': _get_setting('backup_frequency', 'daily') or 'daily',
+        'default_connection_type': _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'SSH',
         'backup_retention_days': _get_setting('backup_retention_days', str(BACKUP_RETENTION_DAYS)),
         'timezone': _get_setting('timezone', DEFAULT_TIMEZONE),
         'footer_text': _get_setting('footer_text', ''),
@@ -3712,7 +3718,7 @@ def get_settings():
         'backup_failure_webhook': _get_setting('backup_failure_webhook', ''),
         'api_tokens': _get_setting('api_tokens', ''),
         # 自动发现设置
-        'discovery_frequency': _get_setting('discovery_frequency', 'none'),
+        'discovery_frequency': _get_setting('discovery_frequency', 'twice_daily'),
         'discovery_type_keywords': discovery_type_keywords,
         'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', '.'),
         'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '2'),

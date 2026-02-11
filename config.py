@@ -21,18 +21,18 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 # 生产环境请通过环境变量 SECRET_KEY 覆盖为随机且足够复杂的值
 SECRET_KEY = os.environ.get('SECRET_KEY', 'change-me-in-production-please')
 
-# 默认登录账号 (可在 Web 界面修改，Telnet/SSH 共用)
-DEFAULT_USERNAME = os.environ.get('BACKUP_USERNAME', 'coniadmin')
-DEFAULT_PASSWORD = os.environ.get('BACKUP_PASSWORD', 'C0niC1Oud@auth')
+# 默认登录账号 (可在 Web 界面修改，Telnet/SSH 共用)，默认留空，仅通过 Web 或环境变量配置
+DEFAULT_USERNAME = os.environ.get('BACKUP_USERNAME', '')
+DEFAULT_PASSWORD = os.environ.get('BACKUP_PASSWORD', '')
 
-# 默认连接方式：TELNET / SSH
-DEFAULT_CONNECTION_TYPE = os.environ.get('BACKUP_CONNECTION_TYPE', 'TELNET').upper()
+# 默认连接方式：TELNET / SSH（默认 SSH，更安全）
+DEFAULT_CONNECTION_TYPE = os.environ.get('BACKUP_CONNECTION_TYPE', 'SSH').upper()
 
 # SSH 端口
 SSH_PORT = int(os.environ.get('SSH_PORT', '22'))
 
-# 备份并发线程数
-BACKUP_THREAD_NUM = int(os.environ.get('BACKUP_THREAD_NUM', '10'))
+# 备份并发线程数（默认 5，更稳妥）
+BACKUP_THREAD_NUM = int(os.environ.get('BACKUP_THREAD_NUM', '5'))
 
 # 排除设备名称模式 (正则)
 EXCLUDE_PATTERNS = r".*OOB.*|.*4G.*|.*LTM.*|.*NTA.*|.*SSL.*"
