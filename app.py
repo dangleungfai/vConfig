@@ -3002,6 +3002,27 @@ def run_backup_one(device_id):
                     job.status = 'completed'
                     job.end_time = datetime.utcnow().isoformat() + 'Z'
                     db.session.commit()
+                    # 单台备份失败时也触发 Webhook 告警（与全量备份失败保持一致风格）
+                    if status != 'OK':
+                        webhook = (_get_setting('backup_failure_webhook', '') or '').strip()
+                        if webhook and webhook.startswith(('http://', 'https://')):
+                            msg = '【vConfig 备份告警】单台备份失败：%s (%s, %s)。错误：%s' % (
+                                hostname or ip or '',
+                                ip or '',
+                                dev_type or '',
+                                message or '未知错误',
+                            )
+                            body = _webhook_body_for_url(webhook, msg, {
+                                'event': 'single_backup_failure',
+                                'job_id': job.id,
+                                'hostname': hostname,
+                                'ip': ip,
+                                'device_type': dev_type,
+                                'status': status,
+                                'error': message,
+                                'end_time': job.end_time,
+                            })
+                            _call_webhook_with_retry(webhook, body, max_retries=3)
                 # 单台备份完成后计算「配置变动」并写入数据库
                 try:
                     _save_config_changes_to_db()
