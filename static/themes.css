@@ -1,0 +1,100 @@
+/* 多皮肤 - 右上角切换，默认浅色 */
+
+/* 深色 · 运维 */
+[data-theme="dark"] {
+    --bg: #050814;
+    --bg-card: #0e172a;
+    --bg-elevated: #141e32;
+    --border: #243552;
+    --text: #e8f0ff;
+    --text-muted: #7f8fb0;
+    --primary: #00b5ff;
+    --primary-hover: #27c5ff;
+    --success: #3fb950;
+    --error: #f85149;
+    --warn: #f0b429;
+    --shadow: 0 1px 6px rgba(0,0,0,.45);
+    --shadow-card: 0 10px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(0,181,255,.12);
+    --glass: rgba(4,14,40,.88);
+}
+
+[data-theme="dark"] body { background: linear-gradient(180deg, #050814 0%, #0b1530 100%); }
+[data-theme="dark"] .app-header { backdrop-filter: blur(12px); }
+[data-theme="dark"] .tab { color: var(--text-muted); }
+[data-theme="dark"] .tab.active { color: var(--text); background: var(--border); }
+[data-theme="dark"] .tab.active:hover { color: var(--text); }
+
+/* 浅色 · 专业（与 Apple 接近，偏灰） */
+[data-theme="light"] {
+    --bg: #f6f8fa;
+    --bg-card: #ffffff;
+    --bg-elevated: #f0f2f5;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --primary: #0969da;
+    --primary-hover: #0550ae;
+    --success: #1a7f37;
+    --error: #cf222e;
+    --warn: #9a6700;
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
+    --shadow-card: 0 4px 20px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.06);
+    --glass: rgba(255,255,255,.9);
+}
+
+/* 蓝色 · 科技 */
+[data-theme="blue"] {
+    --bg: #0a1628;
+    --bg-card: #0f2137;
+    --bg-elevated: #16324c;
+    --border: #1e4976;
+    --text: #e8f4fc;
+    --text-muted: #7eb8e8;
+    --primary: #2d9dff;
+    --primary-hover: #5eb3ff;
+    --success: #34c759;
+    --error: #ff6b6b;
+    --warn: #ffc107;
+    --shadow: 0 2px 8px rgba(0,0,0,.4);
+    --glass: rgba(10,22,40,.92);
+}
+
+[data-theme="blue"] .app-header {
+    background: var(--glass);
+    border-bottom-color: var(--border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+[data-theme="blue"] .stat-card { border-left: 3px solid var(--primary); }
+[data-theme="blue"] .stat-card.stat-success { border-left-color: var(--success); }
+[data-theme="blue"] .stat-card.stat-danger { border-left-color: var(--error); }
+[data-theme="blue"] .stat-card.stat-warn { border-left-color: var(--warn); }
+
+/* 深蓝 · 运维 */
+[data-theme="navy"] {
+    --bg: #0d1b2a;
+    --bg-card: #1b263b;
+    --bg-elevated: #253549;
+    --border: #415a77;
+    --text: #e0e1dd;
+    --text-muted: #778da9;
+    --primary: #4cc9f0;
+    --primary-hover: #72ddf7;
+    --success: #52b788;
+    --error: #e07a5f;
+    --warn: #f4a261;
+    --shadow: 0 2px 6px rgba(0,0,0,.35);
+    --glass: rgba(13,27,42,.92);
+}
+
+[data-theme="navy"] .app-header {
+    background: var(--glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+[data-theme="navy"] .brand-icon { color: var(--primary); }
+[data-theme="navy"] .tab { color: var(--text-muted); }
+[data-theme="navy"] .tab:hover { color: var(--text); }
+[data-theme="navy"] .tab.active { background: var(--border); color: var(--text); }
+[data-theme="navy"] .tab.active:hover { color: var(--text); }
+[data-theme="navy"] .btn-primary { background: linear-gradient(135deg, #3a86ff 0%, #4cc9f0 100%); }

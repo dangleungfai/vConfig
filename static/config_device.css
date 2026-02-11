@@ -1,0 +1,189 @@
+/* 设备历史备份与配置对比页 */
+.config-device-page { max-width: 1200px; margin: 0 auto; padding: 1.5rem 0; }
+.config-device-breadcrumb {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);
+}
+.config-device-breadcrumb a { color: var(--primary); text-decoration: none; }
+.config-device-breadcrumb a:hover { text-decoration: underline; }
+.config-device-breadcrumb .sep { opacity: 0.6; }
+.config-device-breadcrumb .current { color: var(--text); font-weight: 600; }
+.config-device-header { margin-bottom: 1.5rem; }
+.config-device-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; font-weight: 600; }
+.config-files-section, .config-diff-section, .config-compliance-section {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    box-shadow: var(--shadow);
+}
+.config-files-section h2, .config-diff-section h2, .config-compliance-section h2 {
+    margin: 0 0 1rem; font-size: 1rem; font-weight: 600; color: var(--text-muted);
+}
+.config-files-list-standalone { list-style: none; padding: 0; margin: 0; max-height: 280px; overflow-y: auto; }
+.config-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.config-file-row:last-child { border-bottom: none; }
+.config-file-row > a:first-of-type {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.config-file-row > a:first-of-type:hover { text-decoration: underline; }
+.config-file-size {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 70px;
+    text-align: right;
+}
+.config-file-download {
+    flex-shrink: 0;
+    text-decoration: none;
+}
+.config-file-download:hover { text-decoration: none; }
+.diff-section-desc { margin: 0 0 1rem; font-size: 0.9rem; }
+.diff-controls {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+.diff-controls label { font-size: 0.85rem; color: var(--text-muted); }
+.diff-controls select {
+    padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); min-width: 220px;
+}
+.diff-controls #btn-diff-toggle-changed {
+    background: var(--warn);
+    border-color: var(--warn);
+    color: #ffffff;
+}
+.diff-controls #btn-diff-toggle-changed:hover {
+    background: #ffcc4d;
+    border-color: #ffcc4d;
+    color: #ffffff;
+}
+.diff-result {
+    margin-top: 1rem; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); padding: 1rem; overflow: auto; max-height: 70vh;
+}
+.diff-pretty { margin: 0; font-family: ui-monospace, monospace; font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+.diff-pretty ins { background: rgba(34, 160, 80, 0.25); color: var(--success); text-decoration: none; padding: 0 2px; }
+.diff-pretty del { background: rgba(248, 81, 73, 0.25); color: var(--error); text-decoration: none; padding: 0 2px; }
+.diff-side-by-side {
+    display: flex;
+    gap: 1rem;
+}
+.diff-pane {
+    flex: 1;
+    min-width: 0;
+    max-height: 64vh;
+    overflow: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+}
+.diff-pane-header {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.diff-pane-body {
+    padding: 0.4rem 0.6rem;
+    white-space: pre;
+}
+.diff-line {
+    padding: 0 0 0.1rem 0;
+}
+.diff-line.changed {
+    background: rgba(0,181,255,0.08);
+}
+.diff-only-changed .diff-line:not(.changed) {
+    display: none;
+}
+.hidden { display: none !important; }
+.config-device-page .loading-state { padding: 0.75rem; color: var(--text-muted); }
+.config-device-page .empty-state { padding: 1rem; color: var(--text-muted); }
+.config-device-page .error { color: var(--error); }
+
+/* 合规检查卡片 */
+.compliance-result {
+    font-size: 0.9rem;
+}
+.compliance-overall {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+}
+.compliance-overall .label {
+    color: var(--text-muted);
+}
+.compliance-overall .value {
+    font-weight: 600;
+}
+.compliance-overall .value.status-ok {
+    color: var(--success);
+}
+.compliance-overall .value.status-warn {
+    color: var(--warn);
+}
+.compliance-overall .value.status-fail {
+    color: var(--danger);
+}
+.compliance-overall .meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.compliance-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.compliance-rule {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+.compliance-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+.compliance-tag.status-ok {
+    background: rgba(46, 160, 67, 0.18);
+    color: var(--success);
+}
+.compliance-tag.status-warn {
+    background: rgba(210, 153, 34, 0.18);
+    color: var(--warn);
+}
+.compliance-tag.status-fail {
+    background: rgba(248, 81, 73, 0.18);
+    color: var(--danger);
+}
+.compliance-text {
+    flex: 1 1 auto;
+    color: var(--text);
+}
+
+/* 玻璃卡片效果（与主站一致时由 themes 覆盖） */
+.card-glassy {
+    /* 基础背景，具体主题可覆盖 */
+    background: var(--bg-card);
+}

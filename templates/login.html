@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - {{ system_name or '配置备份中心' }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
+</head>
+<body class="login-page">
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo" aria-hidden="true">配</div>
+                <h1>{{ system_name or '配置备份中心' }}</h1>
+                <p class="login-tagline">安全 · 稳定 · 可观测</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-row">
+                    <label for="login-username">用户名</label>
+                    <input type="text" id="login-username" autocomplete="username" placeholder="请输入用户名">
+                </div>
+                <div class="form-row">
+                    <label for="login-password">密码</label>
+                    <input type="password" id="login-password" autocomplete="current-password" placeholder="请输入密码">
+                </div>
+                <button type="submit" class="btn btn-primary login-btn">登录</button>
+                <p class="login-error" id="login-error" aria-live="polite"></p>
+            </form>
+        </div>
+    </div>
+    <script>
+    (function () {
+        const form = document.getElementById('login-form');
+        const errEl = document.getElementById('login-error');
+        const usernameEl = document.getElementById('login-username');
+        const passwordEl = document.getElementById('login-password');
+
+        function getNextUrl() {
+            const params = new URLSearchParams(window.location.search || '');
+            const nxt = params.get('next');
+            return nxt && nxt.startsWith('/') ? nxt : '/';
+        }
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            errEl.textContent = '';
+            const username = (usernameEl.value || '').trim();
+            const password = passwordEl.value || '';
+            if (!username || !password) {
+                errEl.textContent = '用户名和密码不能为空';
+                return;
+            }
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    window.location.href = getNextUrl();
+                } else {
+                    errEl.textContent = data.error || '登录失败';
+                }
+            } catch (e) {
+                errEl.textContent = '登录请求失败，请稍后重试';
+            }
+        });
+
+        // 回车聚焦优化
+        usernameEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                passwordEl.focus();
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
+

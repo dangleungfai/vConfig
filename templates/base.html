@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ system_name or '配置备份中心' }}{% endblock %}</title>
+    <script>
+    window.__staticFailed = false;
+    window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') && !window.__staticFailed) {
+            window.__staticFailed = true;
+            document.body = document.createElement('body');
+            document.body.innerHTML = '<div style="padding:2rem;max-width:480px;margin:2rem auto;font-family:sans-serif;line-height:1.6;">' +
+                '<p><strong>资源加载失败</strong>（可能 403）。</p>' +
+                '<p>请用<strong>系统自带浏览器</strong>访问：<a href="http://127.0.0.1:5000">http://127.0.0.1:5000</a> 或 <a href="http://localhost:5000">http://localhost:5000</a></p>' +
+                '<p>若仍 403，请在浏览器 F12 → Network 中查看是哪个地址返回 403，并检查服务器或反向代理配置。</p></div>';
+        }
+    }, true);
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}{% if static_version %}?v={{ static_version }}{% endif %}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}{% if static_version %}?v={{ static_version }}{% endif %}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="app-header-inner">
+            <a href="/" class="brand">
+                {% if logo_url %}
+                <img src="{{ logo_url }}" alt="Logo" class="brand-logo">
+                {% else %}
+                <span class="brand-icon" aria-hidden="true">◆</span>
+                {% endif %}
+                <span>{{ system_name or '配置备份中心' }}</span>
+            </a>
+            <nav class="nav-tabs">
+                <a href="#" data-tab="dashboard" class="tab active">仪表盘</a>
+                <a href="#" data-tab="devices" class="tab">设备管理</a>
+                <a href="#" data-tab="backup" class="tab">备份任务</a>
+                <a href="#" data-tab="logs" class="tab">备份日志</a>
+                <a href="#" data-tab="configs" class="tab">备份配置</a>
+                <a href="#" data-tab="config-changes" class="tab">配置变动</a>
+                <a href="#" data-tab="settings" class="tab">系统设置</a>
+            </nav>
+            <div class="header-right">
+            <div class="theme-switcher" id="theme-switcher">
+                <button type="button" class="theme-btn" id="theme-btn" title="外观">外观 ▾</button>
+                <div class="theme-dropdown" id="theme-dropdown">
+                    <button type="button" data-theme="light">浅色 · 专业</button>
+                    <button type="button" data-theme="dark">深色 · 运维</button>
+                    <button type="button" data-theme="blue">蓝色 · 科技</button>
+                    <button type="button" data-theme="navy">深蓝 · 运维</button>
+                </div>
+            </div>
+            {% if current_user %}
+            <span class="header-user">{{ current_user }}</span>
+            {% endif %}
+            <a href="{{ url_for('logout_view') }}" class="tab header-logout">退出</a>
+            </div>
+        </div>
+    </header>
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="app-footer" id="app-footer" role="contentinfo" data-timezone="{{ footer_timezone or 'Asia/Shanghai' }}">
+        <span class="app-footer-time" id="footer-time">当前时间: --</span>
+        <span class="app-footer-sep" id="footer-sep1"> | </span>
+        <span class="app-footer-ip" id="footer-ip">{% if footer_client_ip %}来访者 IP: {{ footer_client_ip }}{% else %}来访者 IP: --{% endif %}</span>
+        <span class="app-footer-sep" id="footer-sep2">{% if footer_text %} | {% endif %}</span>
+        <span class="app-footer-custom" id="footer-custom">{{ footer_text or '' }}</span>
+    </footer>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    <script src="{{ url_for('static', filename='app.js') }}{% if static_version %}?v={{ static_version }}{% endif %}"></script>
+</body>
+</html>
