@@ -48,6 +48,27 @@ _install_nginx() {
     fi
 }
 
+_install_snmp() {
+    # 仅安装 SNMP 客户端工具（snmpwalk），方便在服务器上手动测试设备是否可通过 SNMP 访问
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y snmp
+    elif command -v apt &>/dev/null; then
+        sudo apt update && sudo apt install -y snmp
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y net-snmp-utils
+    elif command -v yum &>/dev/null; then
+        sudo yum install -y net-snmp-utils
+    elif command -v apk &>/dev/null; then
+        sudo apk add net-snmp
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -Sy --noconfirm net-snmp
+    elif command -v zypper &>/dev/null; then
+        sudo zypper install -y net-snmp
+    else
+        return 1
+    fi
+}
+
 _kill_port_if_used() {
     local port=$1
     local pids
@@ -118,6 +139,13 @@ if [ -z "$PYTHON_CMD" ]; then
     echo "未检测到 Python 3.8+，已尝试自动安装。若仍失败，请手动安装后重新运行。"
     exit 1
 fi
+
+echo "[3/7] 检查并安装 SNMP 客户端(snmpwalk)..."
+if ! command -v snmpwalk &>/dev/null; then
+    echo "未检测到 snmpwalk，正在尝试自动安装..."
+    _install_snmp || true
+fi
+command -v snmpwalk &>/dev/null && echo "SNMP 客户端已就绪 (snmpwalk)。" || echo "提示：未安装 snmpwalk，仅影响手工测试，不影响自动发现功能。"
 
 echo "[4/8] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
