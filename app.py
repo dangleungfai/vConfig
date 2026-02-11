@@ -4375,7 +4375,13 @@ def db_backup():
     dir_name = os.path.dirname(db_path)
     file_name = os.path.basename(db_path)
     fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
-    return send_from_directory(dir_name, file_name, as_attachment=True, attachment_filename=fn)
+    # Flask >= 2.0 中 attachment_filename 已废弃，使用 download_name
+    return send_from_directory(
+        dir_name,
+        file_name,
+        as_attachment=True,
+        download_name=fn,
+    )
 
 
 @app.route('/api/settings/db/restore', methods=['POST'])
