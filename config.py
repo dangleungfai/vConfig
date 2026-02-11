@@ -38,7 +38,8 @@ BACKUP_THREAD_NUM = int(os.environ.get('BACKUP_THREAD_NUM', '10'))
 EXCLUDE_PATTERNS = r".*OOB.*|.*4G.*|.*LTM.*|.*NTA.*|.*SSL.*"
 
 # 历史备份保留天数（超过自动删除，0 表示不自动删除）
-BACKUP_RETENTION_DAYS = int(os.environ.get('BACKUP_RETENTION_DAYS', '30'))
+# 默认 365 天，可通过环境变量 BACKUP_RETENTION_DAYS 覆盖
+BACKUP_RETENTION_DAYS = int(os.environ.get('BACKUP_RETENTION_DAYS', '365'))
 
 # 默认系统时区（用于界面时间展示）
 DEFAULT_TIMEZONE = os.environ.get('BACKUP_TIMEZONE', 'Asia/Shanghai')

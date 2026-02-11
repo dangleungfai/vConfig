@@ -51,7 +51,8 @@ _install_nginx() {
 _kill_port_if_used() {
     local port=$1
     local pids
-    pids=$(lsof -i :"$port" -t 2>/dev/null)
+    # 在 set -e 模式下，lsof 查不到进程会返回非 0，这里用 `|| true` 避免脚本中途退出
+    pids=$(lsof -i :"$port" -t 2>/dev/null || true)
     if [ -n "$pids" ]; then
         echo "端口 $port 已被占用，正在终止占用进程: $pids"
         for pid in $pids; do

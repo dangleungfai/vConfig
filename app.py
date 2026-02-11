@@ -5106,7 +5106,7 @@ def _start_http_redirect_server(host: str, https_port: int = 443):
             app.logger.info('HTTP 端口 80 已启动，将自动重定向到 HTTPS')
             httpd.serve_forever()
     except OSError as e:
-        app.logger.warning('HTTP 80 端口监听失败（需 root 或端口被占用）: %s，可设置 FLASK_HTTP_REDIRECT=0 禁用', e)
+        app.logger.warning('HTTP 80 端口监听失败（需 root 或端口被占用）: %s', e)
 
 
 if __name__ == '__main__':
@@ -5121,7 +5121,6 @@ if __name__ == '__main__':
     debug = os.environ.get('FLASK_DEBUG', '1') == '1'
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     use_https = os.environ.get('FLASK_HTTPS', '1') == '1'
-    http_redirect = os.environ.get('FLASK_HTTP_REDIRECT', '1') == '1'
     port = int(os.environ.get('FLASK_PORT', '443' if use_https else '80'))
     ssl_context = None
     if use_https:
@@ -5129,9 +5128,9 @@ if __name__ == '__main__':
         if certs:
             ssl_context = certs
             app.logger.info('HTTPS 模式：使用证书 %s', certs[0])
-            if http_redirect:
-                t = threading.Thread(target=_start_http_redirect_server, args=(host, port), daemon=True)
-                t.start()
+            # 启用 HTTPS 时，默认在 80 端口启动 HTTP 重定向到 HTTPS
+            t = threading.Thread(target=_start_http_redirect_server, args=(host, port), daemon=True)
+            t.start()
         else:
             use_https = False
             port = 80 if port == 443 else port

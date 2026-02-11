@@ -63,11 +63,10 @@ pip install -r requirements.txt
 | SECRET_KEY | Flask 会话密钥 | 生产环境**必须**设置为随机字符串 |
 | FLASK_PORT | 监听端口 | `443`（HTTPS 时）/ `80`（HTTP 时） |
 | FLASK_HTTPS | 是否启用 HTTPS | `1`（默认启用） |
-| FLASK_HTTP_REDIRECT | HTTP 是否自动跳转 HTTPS（启用 HTTPS 时） | `1`（默认启用） |
 
 **HTTPS 证书**：默认启用时，首次启动会在 `data/certs/` 下自动生成自签名证书（有效期 100 年），需系统已安装 `openssl`。也可在「系统设置 → 通用设置」中上传自有域名证书（PEM 格式 cert + key）。设置 `FLASK_HTTPS=0` 可禁用 HTTPS 改用 HTTP。
 
-**HTTP 自动跳转 HTTPS**：启用 HTTPS 时，默认会在 80 端口启动 HTTP 服务，将所有请求 301 重定向到 HTTPS。80 端口需 root 或 `CAP_NET_BIND_SERVICE` 权限；若启动失败可设置 `FLASK_HTTP_REDIRECT=0` 禁用，或由 Nginx 等反向代理实现跳转。
+**HTTP 自动跳转 HTTPS**：启用 HTTPS 时，应用会在 80 端口启动 HTTP 服务，将所有请求 301 重定向到 HTTPS。80 端口需 root 或 `CAP_NET_BIND_SERVICE` 权限；如需改由 Nginx 等反向代理处理重定向，可关闭内置 HTTPS（`FLASK_HTTPS=0`）并仅在前端处理 TLS。
 
 生产环境示例：
 
