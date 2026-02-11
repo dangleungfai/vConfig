@@ -139,11 +139,13 @@ class Executor:
     """Telnet 执行器 - 支持 Cisco/Juniper/Huawei/H3C/RouterOS"""
     prompt_login = "sername"
     prompt_password = "assword"
-    prompt_junos = "\r\n{master}"
+    # Junos 提示符通常为 user@host>，这里使用通用的 '>' 作为结束标记
+    prompt_junos = ">"
     prompt_cisco = "\r\nend\r\n"
     prompt_ros = "output_success"
     prompt_huawei = "\r\nreturn\r\n"
-    prompt_h3c = "\r\nreturn\r\n"
+    # H3C 提示符同样使用通用的 ">" 作为结束标记，避免因具体字样差异导致长时间等待
+    prompt_h3c = ">"
     prompt_failed_login = "Login incorrect"
 
     def __init__(self, hostname: str, username: str, password: str):
