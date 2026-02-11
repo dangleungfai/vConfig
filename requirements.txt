@@ -10,5 +10,7 @@ gunicorn>=21.0.0
 paramiko>=3.0.0
 ldap3>=2.9.0
 # 自动发现依赖 SNMP 客户端库 pysnmp（服务端从设备取 hostname / sysDescr）
-# 固定版本 4.4.12，兼容当前 getCmd API
+# 固定版本 4.4.12，并显式依赖 pyasn1/pyasn1-modules
 pysnmp==4.4.12
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
