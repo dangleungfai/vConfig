@@ -1023,16 +1023,16 @@ document.getElementById('dashboard-btn-backup')?.addEventListener('click', async
     loadDashboard();
 });
 
-// 皮肤切换
+// 皮肤切换（系统默认深色）
 function applyTheme(theme) {
-    theme = theme || 'light';
+    theme = theme || 'dark';
     if (theme === 'apple') theme = 'light';
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem('vconfig_theme', theme); } catch (e) {}
 }
 function initTheme() {
-    let theme = 'light';
-    try { theme = localStorage.getItem('vconfig_theme') || 'light'; } catch (e) {}
+    let theme = 'dark';
+    try { theme = localStorage.getItem('vconfig_theme') || 'dark'; } catch (e) {}
     applyTheme(theme);
 }
 initTheme();
