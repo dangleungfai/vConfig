@@ -2429,15 +2429,20 @@ def _execute_discovery_rule(rule_id):
         db.session.expire_all()
         for ip in _iter_ip_ranges(rule.ip_range, limit=256):
             scanned_ips.append(ip)
+            # 以 IP 作为唯一性条件：若设备列表中已有该 IP，跳过添加
+            existing = Device.query.filter_by(ip=ip).first()
+            if existing:
+                skipped.append({'ip': ip, 'hostname': '', 'reason': 'exists'})
+                continue
+            # 必须获取到主机名才能添加
             hostname = _snmp_get(ip, hostname_oid, community, timeout_ms, retries) or ''
             hostname = hostname.strip()
-            # 如果 SNMP 未返回主机名，则回退为 IP，避免因为 no_hostname 直接跳过可达设备
             if not hostname:
-                hostname = ip
-            # 主机名过滤：取「前 N 段」拼成主机名（域名格式如 SHA1.PE1 或 SHA1.PE2.example.com，取第2段即取前2段得 SHA1.PE1 / SHA1.PE2）
+                skipped.append({'ip': ip, 'hostname': '', 'reason': 'no_hostname'})
+                continue
+            # 主机名过滤：取「前 N 段」拼成主机名
             split_char = (_get_setting('discovery_hostname_split_char', '') or '').strip()
             try:
-                # 默认取前 2 段拼成主机名（如 sha1.pe1.example.com -> sha1.pe1）
                 seg_one_based = int(_get_setting('discovery_hostname_segment_index', '2') or '2')
                 seg_one_based = max(1, min(seg_one_based, 20))
             except (TypeError, ValueError):
@@ -2446,18 +2451,13 @@ def _execute_discovery_rule(rule_id):
                 parts = hostname.split(split_char)
                 taken = parts[:seg_one_based]
                 hostname = split_char.join(taken).strip()
+            # 必须获取到系统类型才能添加
             dev_type_raw = ''
             if device_type_oid:
                 dev_type_raw = (_snmp_get(ip, device_type_oid, community, timeout_ms, retries) or '').strip()
-            # 根据 SNMP 返回内容与设备类型配置做模糊匹配，例如包含 "Cisco" / "Huawei" / "Juniper" 等关键字则自动归类
             dev_type = _detect_device_type_from_snmp(dev_type_raw)
             if not dev_type:
-                # 若未配置 OID 或获取失败，或无法匹配到任何已知类型，则默认成 Cisco，后续由人工编辑修正
-                dev_type = 'Cisco'
-            # 检查是否已存在：仅按 IP 判重，同一 IP 不重复添加；不同 IP 允许相同主机名（多台设备 SNMP 可能返回相同 hostname）
-            existing = Device.query.filter_by(ip=ip).first()
-            if existing:
-                skipped.append({'ip': ip, 'hostname': hostname, 'reason': 'exists'})
+                skipped.append({'ip': ip, 'hostname': hostname, 'reason': 'no_device_type'})
                 continue
             dev = Device(
                 ip=ip,

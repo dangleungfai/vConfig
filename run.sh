@@ -26,28 +26,6 @@ _install_openssl() {
     fi
 }
 
-_install_nginx() {
-    if command -v apt-get &>/dev/null; then
-        sudo apt-get update && sudo apt-get install -y nginx
-    elif command -v apt &>/dev/null; then
-        sudo apt update && sudo apt install -y nginx
-    elif command -v dnf &>/dev/null; then
-        sudo dnf install -y nginx
-    elif command -v yum &>/dev/null; then
-        sudo yum install -y nginx
-    elif command -v apk &>/dev/null; then
-        sudo apk add nginx
-    elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm nginx
-    elif command -v zypper &>/dev/null; then
-        sudo zypper install -y nginx
-    elif command -v brew &>/dev/null; then
-        brew install nginx
-    else
-        return 1
-    fi
-}
-
 _install_snmp() {
     # 仅安装 SNMP 客户端工具（snmpwalk），方便在服务器上手动测试设备是否可通过 SNMP 访问
     if command -v apt-get &>/dev/null; then
@@ -115,14 +93,9 @@ if ! command -v openssl &>/dev/null; then
     export FLASK_HTTPS=0
 fi
 
-echo "[2/7] 检查并安装 Nginx..."
-if ! command -v nginx &>/dev/null; then
-    echo "未检测到 Nginx，正在尝试自动安装..."
-    _install_nginx || true
-fi
-command -v nginx &>/dev/null && echo "Nginx 已就绪。" || echo "提示：Nginx 未安装，vConfig 将直接监听端口运行。"
+# 不安装 Nginx：由 vConfig 在 80 端口提供 HTTP→HTTPS 跳转，需保证 80 端口未被占用（若曾安装 Nginx 可 systemctl stop nginx）
 
-echo "[3/7] 检查并安装 Python3..."
+echo "[2/7] 检查并安装 Python3..."
 PYTHON_CMD=""
 if command -v python3 &>/dev/null && python3 -c 'import sys; exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null; then
     PYTHON_CMD=python3
@@ -236,6 +209,7 @@ echo "  vConfig 部署完成"
 echo "=============================================="
 echo "  访问链接（请复制给客户）："
 echo "  ${ACCESS_URL}"
+echo "  HTTP(80) 将自动跳转至 HTTPS。"
 echo ""
 echo "  首次登录：用户名 admin  密码 admin123"
 echo "  登录后请在「系统设置」中修改管理员密码。"

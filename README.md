@@ -66,7 +66,7 @@ pip install -r requirements.txt
 
 **HTTPS 证书**：默认启用时，首次启动会在 `data/certs/` 下自动生成自签名证书（有效期 100 年），需系统已安装 `openssl`。也可在「系统设置 → 通用设置」中上传自有域名证书（PEM 格式 cert + key）。设置 `FLASK_HTTPS=0` 可禁用 HTTPS 改用 HTTP。
 
-**HTTP 自动跳转 HTTPS**：启用 HTTPS 时，应用会在 80 端口启动 HTTP 服务，将所有请求 301 重定向到 HTTPS。80 端口需 root 或 `CAP_NET_BIND_SERVICE` 权限；如需改由 Nginx 等反向代理处理重定向，可关闭内置 HTTPS（`FLASK_HTTPS=0`）并仅在前端处理 TLS。
+**HTTP 自动跳转 HTTPS**：启用 HTTPS 时，应用会在 80 端口启动 HTTP 服务，将所有请求 301 重定向到 HTTPS。80 端口需 root 或 `CAP_NET_BIND_SERVICE` 权限。**无需 Nginx**：默认由 vConfig 直接监听 80 与 443；若本机已安装 Nginx 且占用 80 端口，请停止 Nginx（如 `systemctl stop nginx`）以便跳转生效，或自行在 Nginx 中配置 80→443 重定向。
 
 生产环境示例：
 
@@ -91,7 +91,7 @@ cd vConfig
 sudo ./run.sh
 ```
 
-脚本会自动安装 OpenSSL、Python3、Nginx（可选），创建虚拟环境，初始化数据库，并注册为 systemd 服务 `vconfig`。部署完成后使用 systemctl 管理：
+脚本会自动安装 OpenSSL、Python3 等依赖，创建虚拟环境，初始化数据库，并注册为 systemd 服务 `vconfig`。**不安装 Nginx**，由 vConfig 在 80 端口提供 HTTP→HTTPS 跳转，部署时请确保 80 端口未被占用。部署完成后使用 systemctl 管理：
 
 ```bash
 sudo systemctl status vconfig   # 查看状态
