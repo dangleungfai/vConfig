@@ -88,19 +88,8 @@ def _normalize_device_type(dev_type: str) -> str:
     return mapping.get(upper, raw or upper)
 
 
-def _ensure_device_type_configs():
-    """确保设备类型配置表存在并初始化默认设备类型"""
-    global _device_type_configs_initialized
-    if _device_type_configs_initialized:
-        return
-    try:
-        with app.app_context():
-            # 注册内置驱动（仅执行一次）
-            register_builtin_drivers()
-            load_custom_drivers()
-
-            # 初始化默认设备类型（如果不存在）
-            default_types = [
+# 内置设备类型默认配置（与设备类型管理表单同步，列表 API 会据此返回 backup_config/connection_config）
+BUILTIN_DEVICE_TYPES = [
                 {
                     'type_code': 'Cisco',
                     'display_name': 'Cisco交换机/路由器',
@@ -123,7 +112,7 @@ def _ensure_device_type_configs():
                     'backup_config': {
                         'init_commands': ['set cli screen-length 0'],
                         'backup_command': 'show configuration | display set | no-more',
-                        'prompt': '\r\n{master}'
+                        'prompt': '> \r\n'
                     },
                     'connection_config': {
                         'login_prompt': 'sername',
@@ -153,7 +142,7 @@ def _ensure_device_type_configs():
                     'backup_config': {
                         'init_commands': ['screen-length disable'],
                         'backup_command': 'display current-configuration',
-                        'prompt': ']'
+                        'prompt': 'return\r\n'
                     },
                     'connection_config': {
                         'login_prompt': 'sername',
@@ -178,9 +167,30 @@ def _ensure_device_type_configs():
                     },
                     'sort_order': 5
                 },
-            ]
+]
 
-            for dt in default_types:
+
+def _get_builtin_type_config(type_code):
+    """返回内置类型的 backup_config 与 connection_config，供设备类型列表 API 同步到前端输入框。"""
+    code = (type_code or '').strip()
+    for t in BUILTIN_DEVICE_TYPES:
+        if (t.get('type_code') or '').strip() == code:
+            return {'backup_config': t.get('backup_config') or {}, 'connection_config': t.get('connection_config') or {}}
+    return {}
+
+
+def _ensure_device_type_configs():
+    """确保设备类型配置表存在并初始化默认设备类型"""
+    global _device_type_configs_initialized
+    if _device_type_configs_initialized:
+        return
+    try:
+        with app.app_context():
+            # 注册内置驱动（仅执行一次）
+            register_builtin_drivers()
+            load_custom_drivers()
+
+            for dt in BUILTIN_DEVICE_TYPES:
                 existing = DeviceTypeConfig.query.filter_by(type_code=dt['type_code']).first()
                 if not existing:
                     # 新建：使用通用驱动 + 默认命令配置
@@ -215,6 +225,11 @@ def _ensure_device_type_configs():
                     if (existing.type_code or '').strip() in ('RouterOS', 'ROS'):
                         existing.set_backup_config(dt['backup_config'])
                         existing.set_connection_config(dt['connection_config'])
+                    # Juniper/H3C：将旧版 prompt 同步为当前内置默认（Juniper "> \r\n"，H3C "return\r\n"）
+                    if (existing.type_code or '').strip() == 'Juniper' and bc and (bc.get('prompt') or '').strip() in ('>', '>\n'):
+                        existing.set_backup_config(dt['backup_config'])
+                    if (existing.type_code or '').strip() == 'H3C' and bc and (bc.get('prompt') or '').strip() in ('>', '>\n', '> \r\n', '>   \r\n'):
+                        existing.set_backup_config(dt['backup_config'])
 
             db.session.commit()
             _device_type_configs_initialized = True
@@ -786,6 +801,8 @@ def _get_default_settings():
         'device_per_page_default': '50',
         'log_per_page_default': '50',
         'backup_timeout_seconds': '30',
+        # 配置输出等待时间（秒）：发备份命令后等待设备输出的最长时间，所有设备类型共用
+        'backup_read_timeout_seconds': '30',
         # 备份并发线程数：默认 5
         'backup_thread_num': str(BACKUP_THREAD_NUM),
         'ssh_port': str(SSH_PORT),
@@ -2716,6 +2733,11 @@ def _start_full_backup(run_type='manual', executor=''):
     except (TypeError, ValueError):
         backup_timeout = 30
     backup_timeout = max(5, min(300, backup_timeout))
+    try:
+        backup_read_timeout = int(_get_setting('backup_read_timeout_seconds', '30') or '30')
+    except (TypeError, ValueError):
+        backup_read_timeout = 30
+    backup_read_timeout = max(10, min(300, backup_read_timeout))
 
     def _build_type_configs():
         """构建设备类型 -> 配置 的显性映射，供备份线程使用"""
@@ -2752,6 +2774,7 @@ def _start_full_backup(run_type='manual', executor=''):
                 ssh_port=ssh_port,
                 telnet_port=telnet_port,
                 timeout_seconds=backup_timeout,
+                read_timeout_seconds=backup_read_timeout,
                 app_context=None,
                 type_configs=type_configs,
             )
@@ -2881,6 +2904,10 @@ def run_backup():
     return jsonify({'ok': True, 'message': msg})
 
 
+# 备份任务最大允许「进行中」时长（秒），超过则自动标记为超时结束
+_BACKUP_JOB_TIMEOUT_SECONDS = 10 * 60  # 10 分钟
+
+
 @app.route('/api/backup/status')
 def backup_status():
     _ensure_tables()
@@ -2889,6 +2916,30 @@ def backup_status():
         current = dict(_current_job) if _current_job else None
     memory_ids = {j['id'] for j in memory_jobs}
     db_runs = BackupJobRun.query.order_by(BackupJobRun.id.desc()).limit(_MAX_BACKUP_JOBS).all()
+    # 将超过规定时间仍为「进行中」的任务自动标记为超时结束，避免一直卡住
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
+    for r in db_runs:
+        if (r.status or '').strip().lower() != 'running':
+            continue
+        try:
+            st_str = (r.start_time or '').replace('Z', '+00:00')
+            st = datetime.fromisoformat(st_str) if st_str else None
+        except Exception:
+            st = None
+        if not st:
+            continue
+        elapsed = (now_utc - st).total_seconds() if st.tzinfo else (datetime.utcnow() - st).total_seconds()
+        if elapsed < _BACKUP_JOB_TIMEOUT_SECONDS:
+            continue
+        r.status = 'completed'
+        r.end_time = now_utc.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        r.done = r.total or 1
+        r.fail = max(1, (r.total or 1) - (r.ok or 0))
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     db_jobs = [r.to_dict() for r in db_runs if r.id not in memory_ids]
 
     # 为「单台备份」任务补充目标设备信息，便于前端展示
@@ -2961,6 +3012,11 @@ def run_backup_one(device_id):
         _timeout = max(5, min(300, _timeout))
     except (TypeError, ValueError):
         _timeout = 30
+    try:
+        _read_timeout = int(_get_setting('backup_read_timeout_seconds', '30') or '30')
+        _read_timeout = max(10, min(300, _read_timeout))
+    except (TypeError, ValueError):
+        _read_timeout = 30
     default_user = _get_setting('username', DEFAULT_USERNAME)
     default_pass = _get_setting('password', DEFAULT_PASSWORD)
 
@@ -3062,6 +3118,7 @@ def run_backup_one(device_id):
                 ssh_port=dev_ssh,
                 telnet_port=dev_telnet,
                 timeout_seconds=_timeout,
+                read_timeout_seconds=_read_timeout,
                 app_context=app.app_context(),
                 type_configs=type_configs,
             )
@@ -3733,6 +3790,7 @@ def get_settings():
         'snmp_retries': _get_setting('snmp_retries', '1'),
         # 备份：超时/线程/端口/告警
         'backup_timeout_seconds': _get_setting('backup_timeout_seconds', '30'),
+        'backup_read_timeout_seconds': _get_setting('backup_read_timeout_seconds', '30'),
         'backup_thread_num': _get_setting('backup_thread_num', str(BACKUP_THREAD_NUM)),
         'ssh_port': _get_setting('ssh_port', str(SSH_PORT)),
         'telnet_port': _get_setting('telnet_port', '23'),
@@ -3903,6 +3961,15 @@ def list_device_types_api():
         q = q.filter_by(enabled=True)
     types = q.order_by(DeviceTypeConfig.sort_order.asc(), DeviceTypeConfig.type_code.asc()).all()
     items = [t.to_dict() for t in types]
+    # 内置类型的参数同步为当前内置默认值，保证设备类型设置输入框与内置驱动一致
+    builtin_codes = {'Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'}
+    for it in items:
+        code = (it.get('type_code') or '').strip()
+        if code in builtin_codes:
+            default_cfg = _get_builtin_type_config(code)
+            if default_cfg:
+                it['backup_config'] = default_cfg.get('backup_config') or {}
+                it['connection_config'] = default_cfg.get('connection_config') or {}
     return jsonify({'items': items})
 
 
@@ -4114,6 +4181,12 @@ def update_settings():
             _set_setting('backup_timeout_seconds', str(max(5, min(300, n))))
         except (TypeError, ValueError):
             _set_setting('backup_timeout_seconds', '30')
+    if data.get('backup_read_timeout_seconds') is not None:
+        try:
+            n = int(data['backup_read_timeout_seconds'])
+            _set_setting('backup_read_timeout_seconds', str(max(10, min(300, n))))
+        except (TypeError, ValueError):
+            _set_setting('backup_read_timeout_seconds', '30')
     if data.get('backup_thread_num') is not None:
         try:
             n = int(data['backup_thread_num'])

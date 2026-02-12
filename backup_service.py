@@ -13,6 +13,9 @@ from typing import Optional, Callable, List, Tuple
 DEFAULT_SSH_PORT = 22
 DEFAULT_TELNET_PORT = 23
 
+# 所有设备类型备份时「等待配置输出」的全局超时（秒），SSH 读循环与 Telnet read_until 均受此限制
+BACKUP_READ_TIMEOUT_SECONDS = 30
+
 
 def _clean_routeros_backup_content(content: str) -> str:
     """去掉 RouterOS 备份中的终端回显和 ANSI 转义，只保留 /export 的配置正文。若未发现配置内容则返回说明（避免保存整段日志）。"""
@@ -90,7 +93,7 @@ def _get_device_driver(dev_type: str, type_config: Optional[dict] = None):
                 'backup_config': {
                     'init_commands': ['set cli screen-length 0'],
                     'backup_command': 'show configuration | display set | no-more',
-                    'prompt': '\r\n{master}'
+                    'prompt': '> \r\n'
                 },
                 'connection_config': {
                     'login_prompt': 'sername',
@@ -112,7 +115,7 @@ def _get_device_driver(dev_type: str, type_config: Optional[dict] = None):
                 'backup_config': {
                     'init_commands': ['screen-length disable'],
                     'backup_command': 'display current-configuration',
-                    'prompt': ']'
+                    'prompt': 'return\r\n'
                 },
                 'connection_config': {
                     'login_prompt': 'sername',
@@ -139,13 +142,12 @@ class Executor:
     """Telnet 执行器 - 支持 Cisco/Juniper/Huawei/H3C/RouterOS"""
     prompt_login = "sername"
     prompt_password = "assword"
-    # Junos 提示符通常为 user@host>，这里使用通用的 '>' 作为结束标记
-    prompt_junos = ">"
+    # Juniper 提示符 "user@host> \r\n"；H3C 只匹配 return 行即截断
+    prompt_junos = "> \r\n"
     prompt_cisco = "\r\nend\r\n"
     prompt_ros = "output_success"
     prompt_huawei = "\r\nreturn\r\n"
-    # H3C 提示符同样使用通用的 ">" 作为结束标记，避免因具体字样差异导致长时间等待
-    prompt_h3c = ">"
+    prompt_h3c = "return\r\n"
     prompt_failed_login = "Login incorrect"
 
     def __init__(self, hostname: str, username: str, password: str):
@@ -240,7 +242,7 @@ class Executor:
         self._tn.read_until(prompt.encode(), timeout=3)
         self._tn.read_until(prompt.encode(), timeout=3)
         self._run(command)
-        retval = self._tn.read_until(prompt.encode(), 90)
+        retval = self._tn.read_until(prompt.encode(), BACKUP_READ_TIMEOUT_SECONDS)
         return retval.decode('utf-8', errors='replace')
 
     def _run(self, cmd: str):
@@ -267,6 +269,7 @@ def _backup_via_ssh(
     log_callback: Callable,
     ssh_port: int = DEFAULT_SSH_PORT,
     timeout_seconds: int = 30,
+    read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
 ) -> None:
@@ -331,9 +334,9 @@ def _backup_via_ssh(
         time.sleep(2)
         result = b""
         prompt = driver.get_prompt().encode() if driver.get_prompt() else None
-        # 用带超时的 recv 持续读，避免 recv_ready() 漏数据或节奏不对导致收不全
+        read_to = read_timeout_seconds if read_timeout_seconds is not None else BACKUP_READ_TIMEOUT_SECONDS
         channel.settimeout(1.0)
-        for _ in range(120):
+        for _ in range(read_to):
             try:
                 data = channel.recv(65535)
                 if data:
@@ -341,6 +344,37 @@ def _backup_via_ssh(
             except socket.timeout:
                 pass
             if prompt and prompt in result:
+                time.sleep(0.5)
+                try:
+                    result += channel.recv(65535)
+                except (socket.timeout, Exception):
+                    pass
+                break
+            # H3C：配置末尾为 return 行，兼容 "return" / "return " 后 \n 或 \r\n
+            if prompt and b'return' in prompt:
+                return_sentinel = (
+                    b'return\r\n' in result or b'return\n' in result or
+                    b'return \r\n' in result or b'return \n' in result or b'return\r' in result
+                )
+                if return_sentinel:
+                    time.sleep(0.5)
+                    try:
+                        result += channel.recv(65535)
+                    except (socket.timeout, Exception):
+                        pass
+                    break
+                if result.rstrip().endswith(b'return') or result.rstrip().endswith(b'return '):
+                    time.sleep(0.3)
+                    try:
+                        result += channel.recv(65535)
+                    except (socket.timeout, Exception):
+                        pass
+                    if (b'return\r\n' in result or b'return\n' in result or
+                            b'return \r\n' in result or b'return \n' in result or
+                            result.rstrip().endswith(b'return') or result.rstrip().endswith(b'return ')):
+                        break
+            # 兼容 Juniper/H3C 提示符 "> " 后 0~3 个空格再换行，任一出现即结束
+            if prompt and (b'>\r\n' in result or b'> \r\n' in result or b'>  \r\n' in result or b'>   \r\n' in result):
                 time.sleep(0.5)
                 try:
                     result += channel.recv(65535)
@@ -358,11 +392,28 @@ def _backup_via_ssh(
         end = datetime.datetime.now()
         duration = int((end - start).total_seconds())
         content = result.decode('utf-8', errors='replace')
-        # 若驱动使用特定字符串作为结束标记（如 RouterOS 的 output_success），则不把该标记及其后内容写入文件
+        # 若驱动使用特定字符串作为结束标记，则去掉该标记及其后内容；用最后一次出现截断
         if prompt:
-            marker = prompt.decode('utf-8', errors='replace').strip()
-            if marker and marker in content:
-                content = content.split(marker)[0].rstrip()
+            marker = prompt.decode('utf-8', errors='replace')
+            if marker:
+                # H3C 只匹配 return：取最后一次 return 行（含 "return "），保留到该行末尾
+                if 'return' in marker:
+                    idx = -1
+                    for end_marker in ('return \r\n', 'return \n', 'return\r\n', 'return\n'):
+                        i = content.rfind(end_marker)
+                        if i > idx:
+                            idx = i
+                    if idx >= 0:
+                        content = content[:idx] + 'return\r\n'
+                else:
+                    # 兼容 ">" 后 0~3 个空格再换行的多种提示符
+                    idx = -1
+                    for end_marker in (marker, '>   \r\n', '>  \r\n', '> \r\n', '>\r\n'):
+                        i = content.rfind(end_marker)
+                        if i > idx:
+                            idx = i
+                    if idx >= 0:
+                        content = content[:idx].rstrip()
         if (dev_type or '').strip().upper() in ('ROS', 'ROUTEROS'):
             content = _clean_routeros_backup_content(content)
         with open(store_path, 'w') as f:
@@ -399,6 +450,7 @@ def run_backup_task(
     ssh_port: int = DEFAULT_SSH_PORT,
     telnet_port: int = DEFAULT_TELNET_PORT,
     timeout_seconds: int = 30,
+    read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
 ) -> None:
@@ -440,7 +492,7 @@ def run_backup_task(
         store_path = os.path.join(store_dir, f"{hostname}_{suffix}.txt")
 
         if conn_type == "SSH":
-            _backup_via_ssh(ip, hostname, dev_type, dev_username, dev_password, store_path, log_callback, dev_ssh_port, timeout_seconds, app_context, type_configs)
+            _backup_via_ssh(ip, hostname, dev_type, dev_username, dev_password, store_path, log_callback, dev_ssh_port, timeout_seconds, read_timeout_seconds=read_timeout_seconds, app_context=app_context, type_configs=type_configs)
             return
 
         start = datetime.datetime.now()
@@ -489,7 +541,7 @@ def run_backup_task(
                     compiled_prompts = [re.compile(p.encode() if isinstance(p, str) else p) for p in prompts]
                     tn.expect(compiled_prompts, timeout=3)
             
-            # RouterOS：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success, 90)
+            # RouterOS：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success)
             dev_type_upper = (dev_type or '').strip().upper()
             if dev_type_upper in ('ROS', 'ROUTEROS'):
                 prompt_str = driver.get_prompt()
@@ -507,13 +559,28 @@ def run_backup_task(
             # 使用驱动获取提示符
             prompt_str = driver.get_prompt()
             prompt = prompt_str.encode() if prompt_str else b"#"
-            result = tn.read_until(prompt, max(90, timeout_seconds))
+            read_to = read_timeout_seconds if read_timeout_seconds is not None else BACKUP_READ_TIMEOUT_SECONDS
+            result = tn.read_until(prompt, max(read_to, timeout_seconds))
             tn.close()
             end = datetime.datetime.now()
             duration = int((end - start).total_seconds())
             content = result.decode('utf-8', errors='replace')
             if prompt_str and (prompt_str.strip() == 'output_success') and ('output_success' in content):
                 content = content.split('output_success')[0].rstrip()
+            # H3C 只匹配 return，截断后保留末尾 "return" 行
+            if prompt_str and 'return' in prompt_str:
+                for end_marker in ('return\r\n', 'return\n'):
+                    idx = content.rfind(end_marker)
+                    if idx >= 0:
+                        content = content[:idx] + 'return\r\n'
+                        break
+            # 去掉末尾的提示符行（如 "> \r\n"），避免写入文件
+            elif prompt_str and ('>\n' in prompt_str or '>\r\n' in prompt_str or '> \r\n' in prompt_str or '> \n' in prompt_str):
+                for end_marker in ('> \r\n', '>\r\n', '> \n', '>\n'):
+                    idx = content.rfind(end_marker)
+                    if idx >= 0:
+                        content = content[:idx].rstrip()
+                        break
             if dev_type_upper in ('ROS', 'ROUTEROS'):
                 content = _clean_routeros_backup_content(content)
             with open(store_path, 'w') as f:
@@ -544,6 +611,7 @@ def run_single_backup(
     ssh_port: int = DEFAULT_SSH_PORT,
     telnet_port: int = DEFAULT_TELNET_PORT,
     timeout_seconds: int = 30,
+    read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
 ) -> None:
@@ -559,6 +627,7 @@ def run_single_backup(
         ssh_port=ssh_port,
         telnet_port=telnet_port,
         timeout_seconds=timeout_seconds,
+        read_timeout_seconds=read_timeout_seconds,
         app_context=app_context,
         type_configs=type_configs,
     )
@@ -642,6 +711,7 @@ def run_backup_async(
     ssh_port: int = DEFAULT_SSH_PORT,
     telnet_port: int = DEFAULT_TELNET_PORT,
     timeout_seconds: int = 30,
+    read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
 ) -> None:
@@ -662,6 +732,7 @@ def run_backup_async(
                 "ssh_port": ssh_port,
                 "telnet_port": telnet_port,
                 "timeout_seconds": timeout_seconds,
+                "read_timeout_seconds": read_timeout_seconds,
                 "app_context": app_context,
                 "type_configs": type_configs,
             },

@@ -3886,6 +3886,8 @@ async function loadSettings() {
     if (logPerPageEl) logPerPageEl.value = pick('log_per_page_default', d.log_per_page_default || '50');
     const backupTimeoutEl = document.getElementById('setting-backup-timeout');
     if (backupTimeoutEl) backupTimeoutEl.value = pick('backup_timeout_seconds', d.backup_timeout_seconds ?? '30');
+    const backupReadTimeoutEl = document.getElementById('setting-backup-read-timeout');
+    if (backupReadTimeoutEl) backupReadTimeoutEl.value = pick('backup_read_timeout_seconds', d.backup_read_timeout_seconds ?? '30');
     const backupThreadEl = document.getElementById('setting-backup-thread-num');
     if (backupThreadEl) backupThreadEl.value = pick('backup_thread_num', d.backup_thread_num ?? '10');
     const sshPortEl = document.getElementById('setting-ssh-port');
@@ -3993,6 +3995,7 @@ async function loadSettings() {
             'setting-device-per-page',
             'setting-log-per-page',
             'setting-backup-timeout',
+            'setting-backup-read-timeout',
             'setting-backup-thread-num',
             'setting-ssh-port',
             'setting-telnet-port',
@@ -4124,6 +4127,7 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             device_per_page_default: document.getElementById('setting-device-per-page')?.value || '50',
             log_per_page_default: document.getElementById('setting-log-per-page')?.value || '50',
             backup_timeout_seconds: parseInt(document.getElementById('setting-backup-timeout')?.value, 10) || 30,
+            backup_read_timeout_seconds: parseInt(document.getElementById('setting-backup-read-timeout')?.value, 10) || 30,
             backup_thread_num: parseInt(document.getElementById('setting-backup-thread-num')?.value, 10) || 10,
             ssh_port: parseInt(document.getElementById('setting-ssh-port')?.value, 10) || 22,
             telnet_port: parseInt(document.getElementById('setting-telnet-port')?.value, 10) || 23,

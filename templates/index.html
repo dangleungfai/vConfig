@@ -848,6 +848,11 @@
                         <span class="form-hint">单台设备连接与执行超过该秒数视为失败</span>
                     </div>
                     <div class="form-row">
+                        <label>配置输出等待时间（秒）</label>
+                        <input type="number" id="setting-backup-read-timeout" min="10" max="300" placeholder="如 30">
+                        <span class="form-hint">发备份命令后等待设备输出配置的最长时间，所有设备类型共用，超时即结束读取</span>
+                    </div>
+                    <div class="form-row">
                         <label>备份并发线程数</label>
                         <input type="number" id="setting-backup-thread-num" min="1" max="50" placeholder="如 10">
                     </div>
@@ -1078,8 +1083,8 @@
             </div>
             <div class="form-row">
                 <label>提示符匹配（可选）</label>
-                <input type="text" id="device-type-prompt" placeholder="如 Cisco: &#13;&#10;end&#13;&#10;；通用: #">
-                <span class="form-hint">用于判断命令输出结束的提示符，留空则使用通用默认值。</span>
+                <input type="text" id="device-type-prompt" placeholder="如 Cisco: 换行+end+换行；Juniper/H3C: > 加换行（>\n）">
+                <span class="form-hint">用于判断命令输出结束的提示符；Juniper/H3C 建议填 ">\n"（提示符行尾），留空则使用类型默认值。</span>
             </div>
             <div class="form-row">
                 <label>登录提示符（可选）</label>

@@ -28,9 +28,8 @@ class JuniperDriver(BaseDeviceDriver):
         return self.backup_config.get('backup_command', "show configuration | display set | no-more")
     
     def get_prompt(self) -> str:
-        # 默认使用通用的 Junos 提示符结尾字符 ">"，
-        # 而不是固定的 "\r\n{master}"，以适配类似 user@host> 的提示符。
-        return self.backup_config.get('prompt', ">")
+        # Junos 提示符行多为 "user@host> "（> 后带空格）再换行，用 "> \r\n" 匹配
+        return self.backup_config.get('prompt', "> \r\n")
 
 
 class HuaweiDriver(BaseDeviceDriver):
@@ -56,8 +55,8 @@ class H3CDriver(BaseDeviceDriver):
         return self.backup_config.get('backup_command', "display current-configuration")
     
     def get_prompt(self) -> str:
-        # 默认使用通用的提示符结束字符 ">"，适配 H3C 上常见的 user@host> / <H3C> 等形式
-        return self.backup_config.get('prompt', ">")
+        # H3C 配置末尾固定有 return 行，只匹配 return 即截断
+        return self.backup_config.get('prompt', "return\r\n")
 
 
 class RouterOSDriver(BaseDeviceDriver):
