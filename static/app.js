@@ -45,6 +45,37 @@ async function refreshDeviceTypeOptions() {
 
 // 设备类型管理（系统设置 -> 设备类型）
 let _deviceTypeCache = null;
+let _canEditDeviceTypes = true;
+function renderDeviceTypeRows(items, canEdit) {
+    if (!items.length) return '';
+    return items.map(it => {
+        const enabled = it.enabled ? '已启用' : '已禁用';
+        const enabledCls = it.enabled ? 'status-ok' : 'status-fail';
+        const driverLabel = it.driver_type === 'builtin'
+            ? '内置驱动'
+            : (it.driver_type === 'custom' ? '自定义驱动' : '通用驱动');
+        const code = String(it.type_code || '').trim();
+        const isBuiltin = ['Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'].includes(code);
+        const deleteBtn = isBuiltin
+            ? '<button type="button" class="btn btn-secondary btn-sm" disabled title="内置类型不可删除">删除</button>'
+            : '<button type="button" class="btn btn-secondary btn-sm btn-danger-soft" data-device-type-delete>删除</button>';
+        const actionCells = canEdit
+            ? `<button type="button" class="btn btn-secondary btn-sm" data-device-type-edit>编辑</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-device-type-toggle>${it.enabled ? '禁用' : '启用'}</button>
+                ${deleteBtn}`
+            : '—';
+        return `
+            <tr data-id="${it.id}">
+                <td>${escapeHtml(code)}</td>
+                <td>${escapeHtml(it.display_name || '')}</td>
+                <td>${escapeHtml(driverLabel)}</td>
+                <td class="${enabledCls}">${enabled}</td>
+                <td>${it.sort_order ?? 0}</td>
+                <td>${actionCells}</td>
+            </tr>
+        `;
+    }).join('');
+}
 async function loadDeviceTypes(force) {
     const tbody = document.getElementById('device-type-list');
     const hint = document.getElementById('device-type-hint');
@@ -57,33 +88,7 @@ async function loadDeviceTypes(force) {
             tbody.innerHTML = '<tr><td colspan="6">暂无设备类型，请点击「新增类型」添加。</td></tr>';
             if (hint) hint.style.display = '';
         } else {
-            const rows = items.map(it => {
-                const enabled = it.enabled ? '已启用' : '已禁用';
-                const enabledCls = it.enabled ? 'status-ok' : 'status-fail';
-                const driverLabel = it.driver_type === 'builtin'
-                    ? '内置驱动'
-                    : (it.driver_type === 'custom' ? '自定义驱动' : '通用驱动');
-                const code = String(it.type_code || '').trim();
-                const isBuiltin = ['Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'].includes(code);
-                const deleteBtn = isBuiltin
-                    ? '<button type="button" class="btn btn-secondary btn-sm" disabled title="内置类型不可删除">删除</button>'
-                    : '<button type="button" class="btn btn-secondary btn-sm btn-danger-soft" data-device-type-delete>删除</button>';
-                return `
-                    <tr data-id="${it.id}">
-                        <td>${escapeHtml(code)}</td>
-                        <td>${escapeHtml(it.display_name || '')}</td>
-                        <td>${escapeHtml(driverLabel)}</td>
-                        <td class="${enabledCls}">${enabled}</td>
-                        <td>${it.sort_order ?? 0}</td>
-                        <td>
-                            <button type="button" class="btn btn-secondary btn-sm" data-device-type-edit>编辑</button>
-                            <button type="button" class="btn btn-secondary btn-sm" data-device-type-toggle>${it.enabled ? '禁用' : '启用'}</button>
-                            ${deleteBtn}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-            tbody.innerHTML = rows;
+            tbody.innerHTML = renderDeviceTypeRows(items, _canEditDeviceTypes);
             if (hint) hint.style.display = 'none';
         }
         return;
@@ -94,38 +99,13 @@ async function loadDeviceTypes(force) {
         const data = await res.json();
         const items = Array.isArray(data.items) ? data.items : [];
         _deviceTypeCache = items;
+        _canEditDeviceTypes = (data.can_edit_settings === undefined) ? true : !!data.can_edit_settings;
         if (!items.length) {
             tbody.innerHTML = '<tr><td colspan="6">暂无设备类型，请点击「新增类型」添加。</td></tr>';
             if (hint) hint.style.display = '';
             return;
         }
-        const rows = items.map(it => {
-            const enabled = it.enabled ? '已启用' : '已禁用';
-            const enabledCls = it.enabled ? 'status-ok' : 'status-fail';
-            const driverLabel = it.driver_type === 'builtin'
-                ? '内置驱动'
-                : (it.driver_type === 'custom' ? '自定义驱动' : '通用驱动');
-            const code = String(it.type_code || '').trim();
-            const isBuiltin = ['Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'].includes(code);
-            const deleteBtn = isBuiltin
-                ? '<button type="button" class="btn btn-secondary btn-sm" disabled title="内置类型不可删除">删除</button>'
-                : '<button type="button" class="btn btn-secondary btn-sm btn-danger-soft" data-device-type-delete>删除</button>';
-            return `
-                <tr data-id="${it.id}">
-                    <td>${escapeHtml(code)}</td>
-                    <td>${escapeHtml(it.display_name || '')}</td>
-                    <td>${escapeHtml(driverLabel)}</td>
-                    <td class="${enabledCls}">${enabled}</td>
-                    <td>${it.sort_order ?? 0}</td>
-                    <td>
-                        <button type="button" class="btn btn-secondary btn-sm" data-device-type-edit>编辑</button>
-                        <button type="button" class="btn btn-secondary btn-sm" data-device-type-toggle>${it.enabled ? '禁用' : '启用'}</button>
-                        ${deleteBtn}
-                    </td>
-                </tr>
-            `;
-        }).join('');
-        tbody.innerHTML = rows;
+        tbody.innerHTML = renderDeviceTypeRows(items, _canEditDeviceTypes);
         if (hint) hint.style.display = 'none';
     } catch (e) {
         console.warn('loadDeviceTypes failed', e);
@@ -1304,26 +1284,30 @@ async function loadDiscoveryRules() {
         const res = await fetch(`${API}/discovery/rules`);
         const data = await res.json();
         const rules = data.rules || [];
+        const canEdit = (data.can_edit_settings === undefined) ? true : !!data.can_edit_settings;
         if (!rules.length) {
             tbody.innerHTML = '<tr><td colspan="6">暂无规则，请点击「+ 新建规则」添加。</td></tr>';
             return;
         }
-        tbody.innerHTML = rules.map(r => `
+        tbody.innerHTML = rules.map(r => {
+            const actionBtns = canEdit
+                ? `<button type="button" class="btn btn-secondary btn-sm" data-discovery-run="${r.id}">运行</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-toggle="${r.id}">${r.enabled ? '禁用' : '启用'}</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-log="${r.id}">日志</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-edit="${r.id}">编辑</button>
+                    <button type="button" class="btn btn-delete btn-sm" data-discovery-delete="${r.id}">删除</button>`
+                : `<button type="button" class="btn btn-secondary btn-sm" data-discovery-log="${r.id}">日志</button>`;
+            return `
             <tr data-id="${r.id}">
                 <td>${escapeHtml(r.name || '')}</td>
                 <td><pre style="margin:0;white-space:pre-wrap;">${escapeHtml(r.ip_range || '')}</pre></td>
                 <td>${escapeHtml(r.hostname_oid || '')}</td>
                 <td>${escapeHtml(r.device_type_oid || '')}</td>
                 <td>${escapeHtml(r.device_group || '')}</td>
-                <td>
-                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-run="${r.id}">运行</button>
-                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-toggle="${r.id}">${r.enabled ? '禁用' : '启用'}</button>
-                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-log="${r.id}">日志</button>
-                    <button type="button" class="btn btn-secondary btn-sm" data-discovery-edit="${r.id}">编辑</button>
-                    <button type="button" class="btn btn-delete btn-sm" data-discovery-delete="${r.id}">删除</button>
-                </td>
+                <td>${actionBtns}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         tbody.querySelectorAll('[data-discovery-run]').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -3531,6 +3515,7 @@ async function loadUsers() {
         }
         const items = data.items || [];
         _userListCache = items;
+        const canEdit = (data.can_edit_settings === undefined) ? true : !!data.can_edit_settings;
         if (!items.length) {
             tbody.innerHTML = '<tr><td colspan="9">暂无用户记录。用户成功登录后会自动出现在此列表。</td></tr>';
             return;
@@ -3549,16 +3534,18 @@ async function loadUsers() {
             const isLocal = !isLdap;
             const isSuperAdmin = (u.username || '') === 'admin';
             const actions = [];
-            actions.push('<button type="button" class="btn btn-sm btn-secondary" data-action="edit-user">编辑</button>');
-            // 仅本地账号支持复制
-            if (isLocal) {
-                actions.push('<button type="button" class="btn btn-sm btn-secondary" data-action="copy-user">复制</button>');
-            }
-            // 删除按钮规则：
-            // - 超级管理员 admin：不显示删除按钮
-            // - 其他本地账号 与 所有 LDAP 账号：显示删除按钮
-            if (!isSuperAdmin) {
-                actions.push('<button type="button" class="btn btn-sm btn-delete" data-action="delete-user">删除</button>');
+            if (canEdit) {
+                actions.push('<button type="button" class="btn btn-sm btn-secondary" data-action="edit-user">编辑</button>');
+                // 仅本地账号支持复制
+                if (isLocal) {
+                    actions.push('<button type="button" class="btn btn-sm btn-secondary" data-action="copy-user">复制</button>');
+                }
+                // 删除按钮规则：
+                // - 超级管理员 admin：不显示删除按钮
+                // - 其他本地账号 与 所有 LDAP 账号：显示删除按钮
+                if (!isSuperAdmin) {
+                    actions.push('<button type="button" class="btn btn-sm btn-delete" data-action="delete-user">删除</button>');
+                }
             }
             return `
                 <tr data-user-id="${u.id}">
@@ -4021,6 +4008,18 @@ async function loadSettings() {
             'btn-db-backup',
             'btn-db-restore',
             'db-restore-file',
+            'btn-discovery-rule-new',
+            'btn-device-type-new',
+            'btn-user-new',
+            'setting-snmp-version',
+            'setting-snmp-community',
+            'setting-snmp-timeout',
+            'setting-snmp-retries',
+            'discovery-quick-ip-range',
+            'btn-discovery-quick-scan',
+            'btn-discovery-type-keyword-add',
+            'setting-discovery-hostname-split',
+            'setting-discovery-hostname-segment',
         ];
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -4028,6 +4027,10 @@ async function loadSettings() {
         });
         const testBtn = document.getElementById('btn-test-ldap');
         if (testBtn) testBtn.disabled = true;
+        // 供 discovery/users/device-types 子模块判断是否可编辑
+        try { window.__canEditSettings = false; } catch (e) {}
+    } else {
+        try { window.__canEditSettings = true; } catch (e) {}
     }
 }
 document.getElementById('btn-reset-settings-defaults')?.addEventListener('click', async () => {

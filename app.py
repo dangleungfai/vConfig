@@ -2300,8 +2300,8 @@ def discover_devices():
 
 @app.route('/api/discovery/settings', methods=['GET', 'PUT'])
 def discovery_settings():
-    """自动发现 / SNMP 全局设置。"""
-    if not _can_edit_settings():
+    """自动发现 / SNMP 全局设置。GET 允许所有登录用户（只读用户可见）；PUT 仅管理员。"""
+    if request.method == 'PUT' and not _can_edit_settings():
         return jsonify({'error': '当前账号无权修改设置，请使用管理员账号登录。'}), 403
     if request.method == 'GET':
         return jsonify({
@@ -2309,6 +2309,7 @@ def discovery_settings():
             'snmp_community': _get_setting('snmp_community', 'public'),
             'snmp_timeout_ms': _get_setting('snmp_timeout_ms', '2000'),
             'snmp_retries': _get_setting('snmp_retries', '1'),
+            'can_edit_settings': _can_edit_settings(),
         })
     data = request.get_json(force=True, silent=True) or {}
     version = (data.get('snmp_version') or '2c').strip()
@@ -2323,8 +2324,8 @@ def discovery_settings():
 
 @app.route('/api/discovery/rules', methods=['GET', 'POST'])
 def discovery_rules():
-    """自动发现规则列表 & 新建。"""
-    if not _can_edit_settings():
+    """自动发现规则列表 & 新建。GET 允许所有登录用户（只读用户可见）；POST 仅管理员。"""
+    if request.method == 'POST' and not _can_edit_settings():
         return jsonify({'error': '当前账号无权操作，请使用管理员账号登录。'}), 403
     if request.method == 'GET':
         rules = AutoDiscoveryRule.query.order_by(AutoDiscoveryRule.id.desc()).all()
@@ -2335,7 +2336,7 @@ def discovery_rules():
             if not (d.get('device_type_oid') or '').strip():
                 d['device_type_oid'] = '1.3.6.1.2.1.1.1.0'  # sysDescr 作为默认设备类型 OID
             items.append(d)
-        return jsonify({'rules': items})
+        return jsonify({'rules': items, 'can_edit_settings': _can_edit_settings()})
     data = request.get_json(force=True, silent=True) or {}
     name = (data.get('name') or '').strip()
     ip_range = (data.get('ip_range') or '').strip()
@@ -2540,10 +2541,8 @@ def run_discovery_rule(rule_id):
 
 @app.route('/api/discovery/rules/<int:rule_id>/logs', methods=['GET'])
 def list_discovery_rule_logs(rule_id):
-    """某条自动发现规则的最近运行日志列表。"""
+    """某条自动发现规则的最近运行日志列表。所有登录用户可查看（只读用户可见）。"""
     _ensure_tables()
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权查看自动发现日志，请使用管理员账号登录。'}), 403
     rule = AutoDiscoveryRule.query.get_or_404(rule_id)
     logs = (AutoDiscoveryRunLog.query
             .filter_by(rule_id=rule.id)
@@ -3815,9 +3814,7 @@ def get_settings():
 # ---------- 用户管理（基础版：列表 + 更新角色/启用状态） ----------
 @app.route('/api/users', methods=['GET'])
 def list_users_api():
-    """用户列表：仅管理员可查看；内置超级管理员永远排最前"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权查看用户列表，请使用管理员账号登录。'}), 403
+    """用户列表：所有登录用户可查看（只读用户可见）；内置超级管理员永远排最前"""
     from sqlalchemy import case
     users = User.query.order_by(
         case((User.username == SUPER_ADMIN_USERNAME, 0), else_=1),
@@ -3825,6 +3822,7 @@ def list_users_api():
     ).all()
     return jsonify({
         'items': [u.to_dict() for u in users],
+        'can_edit_settings': _can_edit_settings(),
     })
 
 
@@ -3970,7 +3968,7 @@ def list_device_types_api():
             if default_cfg:
                 it['backup_config'] = default_cfg.get('backup_config') or {}
                 it['connection_config'] = default_cfg.get('connection_config') or {}
-    return jsonify({'items': items})
+    return jsonify({'items': items, 'can_edit_settings': _can_edit_settings()})
 
 
 @app.route('/api/device-types', methods=['POST'])
