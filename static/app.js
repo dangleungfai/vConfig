@@ -3910,9 +3910,18 @@ async function loadSettings() {
     setDiscoveryFrequencyDisplay(discoveryFreqVal);
     renderDiscoveryTypeKeywordsRows(pick('discovery_type_keywords', d.discovery_type_keywords || '')).catch(() => {});
     const hostnameSplitEl = document.getElementById('setting-discovery-hostname-split');
-    if (hostnameSplitEl) hostnameSplitEl.value = pick('discovery_hostname_split_char', d.discovery_hostname_split_char || '.');
     const hostnameSegEl = document.getElementById('setting-discovery-hostname-segment');
-    if (hostnameSegEl) hostnameSegEl.value = pick('discovery_hostname_segment_index', d.discovery_hostname_segment_index || '1');
+    if (hostnameSplitEl) {
+        // 若未设置则使用空字符串，placeholder 仅作为「常见按 . 分段」提示
+        const splitChar = pick('discovery_hostname_split_char', d.discovery_hostname_split_char || '');
+        hostnameSplitEl.value = splitChar;
+        if (hostnameSegEl) {
+            // 当分隔符为空时，「分几段」无效，输入框也置空
+            hostnameSegEl.value = splitChar ? (pick('discovery_hostname_segment_index', d.discovery_hostname_segment_index || '1') || '1') : '';
+        }
+    } else if (hostnameSegEl) {
+        hostnameSegEl.value = pick('discovery_hostname_segment_index', d.discovery_hostname_segment_index || '1');
+    }
     const tzEl = document.getElementById('setting-timezone');
     if (tzEl) {
         const tz = (pick('timezone', d.timezone || 'Asia/Shanghai') || 'Asia/Shanghai').trim();
@@ -4143,7 +4152,8 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             snmp_retries: parseInt(document.getElementById('setting-snmp-retries')?.value, 10) || 1,
             discovery_frequency: getDiscoveryFrequencySaveValue(),
             discovery_type_keywords: getDiscoveryTypeKeywordsFromRows(),
-            discovery_hostname_split_char: (document.getElementById('setting-discovery-hostname-split')?.value || '').trim() || '.',
+            // 允许清空：为空时不再强制回退为 '.'
+            discovery_hostname_split_char: (document.getElementById('setting-discovery-hostname-split')?.value || '').trim(),
             discovery_hostname_segment_index: parseInt(document.getElementById('setting-discovery-hostname-segment')?.value, 10) || 1,
             ldap_enabled: document.getElementById('setting-ldap-enabled')?.checked ? '1' : '0',
             ldap_server: document.getElementById('setting-ldap-server')?.value || '',

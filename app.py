@@ -2461,7 +2461,8 @@ def _execute_discovery_rule(rule_id):
             # 主机名过滤：取「前 N 段」拼成主机名
             split_char = (_get_setting('discovery_hostname_split_char', '') or '').strip()
             try:
-                seg_one_based = int(_get_setting('discovery_hostname_segment_index', '2') or '2')
+                # 默认取前 1 段
+                seg_one_based = int(_get_setting('discovery_hostname_segment_index', '1') or '1')
                 seg_one_based = max(1, min(seg_one_based, 20))
             except (TypeError, ValueError):
                 seg_one_based = 1
@@ -3798,8 +3799,10 @@ def get_settings():
         # 自动发现设置
         'discovery_frequency': _get_setting('discovery_frequency', 'twice_daily'),
         'discovery_type_keywords': discovery_type_keywords,
-        'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', '.'),
-        'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '2'),
+        # 主机名过滤：若未设置则前端输入框留空，由 placeholder 提示「.」
+        'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', ''),
+        # 默认「取前 1 段」
+        'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '1'),
         # LDAP
         'ldap_enabled': _get_setting('ldap_enabled', '0'),
         'ldap_server': _get_setting('ldap_server', ''),
@@ -4238,10 +4241,10 @@ def update_settings():
         _set_setting('discovery_hostname_split_char', str(data.get('discovery_hostname_split_char') or '').strip()[:4])
     if 'discovery_hostname_segment_index' in data:
         try:
-            v = int(data.get('discovery_hostname_segment_index') or 2)
+            v = int(data.get('discovery_hostname_segment_index') or 1)
             _set_setting('discovery_hostname_segment_index', str(max(1, min(10, v))))
         except (TypeError, ValueError):
-            _set_setting('discovery_hostname_segment_index', '2')
+            _set_setting('discovery_hostname_segment_index', '1')
 
     # 自动发现：执行频率（只允许固定几种值）
     if 'discovery_frequency' in data:
