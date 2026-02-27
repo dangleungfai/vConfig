@@ -2340,7 +2340,7 @@ def discovery_rules():
                     hostname_oid='1.3.6.1.2.1.1.5.0',
                     device_type_oid='1.3.6.1.2.1.1.1.0',
                     device_group=None,
-                    enabled=True,
+                    enabled=False,
                 )
                 db.session.add(default_rule)
                 db.session.commit()
