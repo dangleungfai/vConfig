@@ -2389,8 +2389,10 @@ def discovery_rule_detail(rule_id):
     return jsonify({'ok': True, 'rule': rule.to_dict()})
 
 
-def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int):
-    """简单 SNMP GET，返回字符串或 None。"""
+def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int, snmp_version: str = '2c'):
+    """简单 SNMP GET，返回字符串或 None。
+
+    snmp_version: '1' 或 '2c'，用于选择 v1/v2c。"""
     try:
         from pysnmp.hlapi import (
             SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
@@ -2399,9 +2401,12 @@ def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int):
     except Exception:
         return None
     try:
+        # pysnmp 中 CommunityData 默认 mpModel=0（v1），此处根据配置切换 v1/v2c
+        ver = (snmp_version or '2c').strip()
+        mp_model = 0 if ver == '1' else 1  # '2c' 及其他视为 v2c
         iterator = getCmd(
             SnmpEngine(),
-            CommunityData(community or 'public'),
+            CommunityData(community or 'public', mpModel=mp_model),
             UdpTransportTarget((ip, 161), timeout=timeout_ms / 1000.0, retries=retries),
             ContextData(),
             ObjectType(ObjectIdentity(oid)),
@@ -2453,7 +2458,7 @@ def _execute_discovery_rule(rule_id):
                 skipped.append({'ip': ip, 'hostname': '', 'reason': 'exists'})
                 continue
             # 必须获取到主机名才能添加
-            hostname = _snmp_get(ip, hostname_oid, community, timeout_ms, retries) or ''
+            hostname = _snmp_get(ip, hostname_oid, community, timeout_ms, retries, snmp_version=snmp_version) or ''
             hostname = hostname.strip()
             if not hostname:
                 skipped.append({'ip': ip, 'hostname': '', 'reason': 'no_hostname'})
@@ -2473,7 +2478,7 @@ def _execute_discovery_rule(rule_id):
             # 必须获取到系统类型才能添加
             dev_type_raw = ''
             if device_type_oid:
-                dev_type_raw = (_snmp_get(ip, device_type_oid, community, timeout_ms, retries) or '').strip()
+                dev_type_raw = (_snmp_get(ip, device_type_oid, community, timeout_ms, retries, snmp_version=snmp_version) or '').strip()
             dev_type = _detect_device_type_from_snmp(dev_type_raw)
             if not dev_type:
                 skipped.append({'ip': ip, 'hostname': hostname, 'reason': 'no_device_type'})

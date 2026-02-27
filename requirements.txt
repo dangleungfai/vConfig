@@ -10,7 +10,7 @@ gunicorn>=21.0.0
 paramiko>=3.0.0
 ldap3>=2.9.0
 # 自动发现依赖 SNMP 客户端库 pysnmp（服务端从设备取 hostname / sysDescr）
-# 固定版本 4.4.12，并显式依赖 pyasn1/pyasn1-modules
-pysnmp==4.4.12
-pyasn1==0.4.8
-pyasn1-modules==0.2.8
+# 旧版 pysnmp 4.x 使用 imp 模块，与 Python 3.12 不兼容，这里升级到 7.x
+pysnmp>=7.0.0
+pyasn1>=0.4.8
+pyasn1-modules>=0.2.8
