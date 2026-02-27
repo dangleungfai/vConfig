@@ -1419,6 +1419,13 @@ async function loadDiscoveryRules() {
             btn.addEventListener('click', async () => {
                 const id = btn.getAttribute('data-discovery-edit');
                 if (!id) return;
+                // 优先使用接口返回的完整规则对象（包含 snmp_community 等字段）
+                const full = rules.find(r => String(r.id) === String(id));
+                if (full) {
+                    openDiscoveryRuleModal(full);
+                    return;
+                }
+                // 兜底：从当前行读取基础字段
                 const tr = btn.closest('tr');
                 const nameTd = tr?.children[0];
                 const ipTd = tr?.children[1];
