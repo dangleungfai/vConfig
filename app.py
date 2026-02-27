@@ -2394,43 +2394,71 @@ def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int, 
 
     snmp_version: '1' 或 '2c'，用于选择 v1/v2c。
 
-    兼容 pysnmp 4.x 与 7.x：
-    - 4.x: getCmd 等符号位于 pysnmp.hlapi 顶层
-    - 7.x: getCmd 等符号位于 pysnmp.hlapi.v1arch / v2arch 子模块"""
+    为兼容 Python 3.12 及 pysnmp 7.x，这里优先使用 v3arch.asyncio 的 get_cmd，
+    若导入失败则回退到旧版 pysnmp 4.x 的同步 getCmd。"""
+    # 优先尝试 pysnmp 7.x v3arch.asyncio API
     try:
+        import asyncio
+        from pysnmp.hlapi.v3arch.asyncio import (
+            SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
+            ObjectType, ObjectIdentity, get_cmd,
+        )
+
+        async def _do():
+            engine = SnmpEngine()
+            try:
+                ver = (snmp_version or '2c').strip()
+                mp_model = 0 if ver == '1' else 1  # '2c' 及其他视为 v2c
+                transport = await UdpTransportTarget.create((ip, 161), timeout=timeout_ms / 1000.0, retries=retries)
+                errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
+                    engine,
+                    CommunityData(community or 'public', mpModel=mp_model),
+                    transport,
+                    ContextData(),
+                    ObjectType(ObjectIdentity(oid)),
+                )
+                if errorIndication or errorStatus:
+                    return None
+                for name, val in varBinds:
+                    return str(val)
+                return None
+            finally:
+                # 关闭 dispatcher 以释放资源；不同版本签名略有差异，这里做兜底处理
+                try:
+                    close = getattr(engine, 'close_dispatcher', None)
+                    if close is not None:
+                        close()
+                except Exception:
+                    pass
+
+        return asyncio.run(_do())
+    except Exception:
+        # 若 v3arch.asyncio 不可用，则回退到旧版同步 HLAPI（pysnmp 4.x）
         try:
-            # pysnmp 7.x 推荐的导入方式
-            from pysnmp.hlapi.v1arch import (
-                SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-                ObjectType, ObjectIdentity, getCmd,
-            )
-        except ImportError:
-            # 向后兼容旧版 pysnmp 4.x
             from pysnmp.hlapi import (
                 SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
                 ObjectType, ObjectIdentity, getCmd,
             )
-    except Exception:
-        return None
-    try:
-        # pysnmp 中 CommunityData 默认 mpModel=0（v1），此处根据配置切换 v1/v2c
-        ver = (snmp_version or '2c').strip()
-        mp_model = 0 if ver == '1' else 1  # '2c' 及其他视为 v2c
-        iterator = getCmd(
-            SnmpEngine(),
-            CommunityData(community or 'public', mpModel=mp_model),
-            UdpTransportTarget((ip, 161), timeout=timeout_ms / 1000.0, retries=retries),
-            ContextData(),
-            ObjectType(ObjectIdentity(oid)),
-        )
-        errorIndication, errorStatus, errorIndex, varBinds = next(iterator)
-        if errorIndication or errorStatus:
+        except Exception:
             return None
-        for name, val in varBinds:
-            return str(val)
-    except Exception:
+        try:
+            ver = (snmp_version or '2c').strip()
+            mp_model = 0 if ver == '1' else 1
+            iterator = getCmd(
+                SnmpEngine(),
+                CommunityData(community or 'public', mpModel=mp_model),
+                UdpTransportTarget((ip, 161), timeout=timeout_ms / 1000.0, retries=retries),
+                ContextData(),
+                ObjectType(ObjectIdentity(oid)),
+            )
+            errorIndication, errorStatus, errorIndex, varBinds = next(iterator)
+            if errorIndication or errorStatus:
+                return None
+            for name, val in varBinds:
+                return str(val)
+        except Exception:
+            return None
         return None
-    return None
 
 
 def _execute_discovery_rule(rule_id):
