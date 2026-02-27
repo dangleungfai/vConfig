@@ -2329,6 +2329,24 @@ def discovery_rules():
         return jsonify({'error': '当前账号无权操作，请使用管理员账号登录。'}), 403
     if request.method == 'GET':
         rules = AutoDiscoveryRule.query.order_by(AutoDiscoveryRule.id.desc()).all()
+        # 若系统尚未配置任何自动发现规则，则自动创建一条默认规则：
+        # 名称为 Network，IP 范围 100.64.0.0/24，无分组，使用默认主机名/设备类型 OID。
+        if not rules:
+            try:
+                default_rule = AutoDiscoveryRule(
+                    name='Network',
+                    ip_range='100.64.0.0/24',
+                    snmp_community=None,
+                    hostname_oid='1.3.6.1.2.1.1.5.0',
+                    device_type_oid='1.3.6.1.2.1.1.1.0',
+                    device_group=None,
+                    enabled=True,
+                )
+                db.session.add(default_rule)
+                db.session.commit()
+                rules = AutoDiscoveryRule.query.order_by(AutoDiscoveryRule.id.desc()).all()
+            except Exception:
+                db.session.rollback()
         items = []
         for r in rules:
             d = r.to_dict()
