@@ -2392,12 +2392,24 @@ def discovery_rule_detail(rule_id):
 def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int, snmp_version: str = '2c'):
     """简单 SNMP GET，返回字符串或 None。
 
-    snmp_version: '1' 或 '2c'，用于选择 v1/v2c。"""
+    snmp_version: '1' 或 '2c'，用于选择 v1/v2c。
+
+    兼容 pysnmp 4.x 与 7.x：
+    - 4.x: getCmd 等符号位于 pysnmp.hlapi 顶层
+    - 7.x: getCmd 等符号位于 pysnmp.hlapi.v1arch / v2arch 子模块"""
     try:
-        from pysnmp.hlapi import (
-            SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-            ObjectType, ObjectIdentity, getCmd,
-        )
+        try:
+            # pysnmp 7.x 推荐的导入方式
+            from pysnmp.hlapi.v1arch import (
+                SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
+                ObjectType, ObjectIdentity, getCmd,
+            )
+        except ImportError:
+            # 向后兼容旧版 pysnmp 4.x
+            from pysnmp.hlapi import (
+                SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
+                ObjectType, ObjectIdentity, getCmd,
+            )
     except Exception:
         return None
     try:
