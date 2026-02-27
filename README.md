@@ -114,7 +114,16 @@ vConfig/
 
 一键脚本会自动检测并安装：OpenSSL、Python 3.8+ 及虚拟环境与 pip、SNMP 客户端工具 `snmpwalk`（可选，用于手工测试 SNMP）。
 
-### 2. 克隆仓库
+### 2. 安装 Git 并克隆仓库
+
+在部署机器上先更新包索引并安装 git（若已安装可跳过）：
+
+```bash
+apt update
+apt install -y git
+```
+
+然后克隆仓库：
 
 ```bash
 cd /opt
