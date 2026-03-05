@@ -142,10 +142,10 @@ git clone git@github.com:dangleungfai/vConfig.git
 在代码目录下执行：
 
 ```bash
-sudo ./run.sh
+sudo ./deploy.sh
 ```
 
-脚本将自动完成：检查并安装 OpenSSL、Python3、SNMP 客户端等依赖；创建虚拟环境 `./venv` 并安装 `requirements.txt`；初始化数据库（如不存在）并重置管理员密码；生成 HTTPS 自签名证书（存放于 `data/certs/`）；注册并启动 systemd 服务 `vconfig`；询问监听端口（默认 443）并输出访问 URL。
+脚本将自动完成：检查并安装 OpenSSL、Python3 及虚拟环境与 pip、SNMP 客户端工具 `snmpwalk`（若安装失败仅影响手工测试，不影响自动发现功能）；创建虚拟环境 `./venv` 并安装 `requirements.txt`；初始化数据库（如不存在）并重置管理员密码；生成 HTTPS 自签名证书（存放于 `data/certs/`）；注册并启动 systemd 服务 `vconfig`；询问监听端口（root 默认 443，普通用户默认 8443）并输出访问 URL。若目标系统缺少 `python3-venv`，脚本会给出明确的安装提示（如 `sudo apt install -y python3-venv python3-pip`）。
 
 部署完成后，使用以下命令管理服务：
 
