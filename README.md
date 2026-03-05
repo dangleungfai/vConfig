@@ -144,9 +144,10 @@ git clone git@github.com:dangleungfai/vConfig.git
 
 ### 3. 一键部署
 
-在代码目录下执行：
+在代码目录下执行（先赋予脚本执行权限）：
 
 ```bash
+chmod a+x deploy.sh
 sudo ./deploy.sh
 ```
 
