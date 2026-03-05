@@ -1,5 +1,5 @@
 #!/bin/bash
-# vConfig 一键部署并启动（生产/开发通用）
+# vConfig 一键部署并启动（生产/开发通用） - 建议使用 ./deploy.sh
 set -e
 cd "$(dirname "$0")"
 SCRIPT_DIR="$(pwd)"
@@ -29,19 +29,21 @@ _install_openssl() {
 _install_snmp() {
     # 仅安装 SNMP 客户端工具（snmpwalk），方便在服务器上手动测试设备是否可通过 SNMP 访问
     if command -v apt-get &>/dev/null; then
-        sudo apt-get update && sudo apt-get install -y snmp
+        sudo apt-get update -y >/dev/null 2>&1 || true
+        sudo apt-get install -y snmp >/dev/null 2>&1 || true
     elif command -v apt &>/dev/null; then
-        sudo apt update && sudo apt install -y snmp
+        sudo apt update -y >/dev/null 2>&1 || true
+        sudo apt install -y snmp >/dev/null 2>&1 || true
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y net-snmp-utils
+        sudo dnf install -y net-snmp-utils >/dev/null 2>&1 || true
     elif command -v yum &>/dev/null; then
-        sudo yum install -y net-snmp-utils
+        sudo yum install -y net-snmp-utils >/dev/null 2>&1 || true
     elif command -v apk &>/dev/null; then
-        sudo apk add net-snmp
+        sudo apk add net-snmp >/dev/null 2>&1 || true
     elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm net-snmp
+        sudo pacman -Sy --noconfirm net-snmp >/dev/null 2>&1 || true
     elif command -v zypper &>/dev/null; then
-        sudo zypper install -y net-snmp
+        sudo zypper install -y net-snmp >/dev/null 2>&1 || true
     else
         return 1
     fi
@@ -113,30 +115,45 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
+echo "检查 Python venv 模块支持..."
+if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
+    echo "未检测到 venv 模块，正在尝试安装 python3-venv/python3-pip..."
+    _install_python3 || true
+fi
+if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
+    echo "当前 Python 环境缺少 venv 模块，无法创建虚拟环境。"
+    if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
+        echo "请先运行: sudo apt install -y python3-venv python3-pip"
+    elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+        echo "请先安装 Python venv 相关软件包后重试。"
+    fi
+    exit 1
+fi
+
 echo "[3/7] 检查并安装 SNMP 客户端(snmpwalk)..."
 if ! command -v snmpwalk &>/dev/null; then
-    echo "未检测到 snmpwalk，正在尝试自动安装..."
+    echo "未检测到 snmpwalk，正在尝试自动安装（失败会自动忽略，仅影响手工测试）..."
     _install_snmp || true
 fi
 command -v snmpwalk &>/dev/null && echo "SNMP 客户端已就绪 (snmpwalk)。" || echo "提示：未安装 snmpwalk，仅影响手工测试，不影响自动发现功能。"
 
-echo "[4/8] 创建虚拟环境并安装依赖..."
+echo "[4/7] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
-    $PYTHON_CMD -m venv venv
+    "$PYTHON_CMD" -m venv venv
     ./venv/bin/pip install -q --upgrade pip
     ./venv/bin/pip install -q -r requirements.txt
 else
     ./venv/bin/pip install -q -r requirements.txt
 fi
 
-echo "[5/8] 初始化数据目录与数据库..."
+echo "[5/7] 初始化数据目录与数据库..."
 mkdir -p data data/configs data/log
 if [ ! -f vconfig.db ] && [ ! -f config_backup.db ] && [ ! -f data/vconfig.db ] && [ ! -f data/config_backup.db ]; then
     ./venv/bin/flask --app app init-db
 fi
 ./venv/bin/flask --app app reset-admin-password
 
-echo "[6/8] 确定监听端口与访问地址..."
+echo "[6/7] 确定监听端口与访问地址..."
 DEFAULT_PORT="443"
 [ "$(id -u)" != "0" ] && DEFAULT_PORT="8443"
 if [ -z "$FLASK_PORT" ]; then
@@ -177,7 +194,7 @@ else
     ACCESS_URL="https://${IP}:${PORT}"
 fi
 
-echo "[7/8] 安装 systemd 服务..."
+echo "[7/7] 安装 systemd 服务..."
 RUN_USER="${SUDO_USER:-$USER}"
 if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
     RUN_USER="root"
@@ -202,7 +219,6 @@ else
     echo "提示：未检测到 systemd，将以前台方式启动（适用于 macOS 或非 systemd 系统）。"
 fi
 
-echo "[8/8] 部署完成"
 echo ""
 echo "=============================================="
 echo "  vConfig 部署完成"
@@ -221,7 +237,7 @@ if command -v systemctl &>/dev/null; then
     echo "    启动服务: sudo systemctl start vconfig"
     echo "    重启服务: sudo systemctl restart vconfig"
 else
-    echo "  若需绑定 443 端口，请使用: sudo ./run.sh"
+    echo "  若需绑定 443 端口，请使用: sudo ./deploy.sh"
     echo "  停止服务: 在当前终端按 Ctrl+C"
 fi
 echo "=============================================="
@@ -233,3 +249,4 @@ if command -v systemctl &>/dev/null && [ -d /etc/systemd/system ]; then
 else
     exec ./venv/bin/python app.py
 fi
+
