@@ -85,19 +85,18 @@ _install_python3() {
     fi
 }
 
-echo "[1/7] 检查并安装 OpenSSL..."
+echo "[1/7] 检查 OpenSSL 环境..."
 if ! command -v openssl &>/dev/null; then
-    echo "未检测到 OpenSSL，正在尝试自动安装..."
-    _install_openssl || true
-fi
-if ! command -v openssl &>/dev/null; then
-    echo "提示：OpenSSL 未安装，将回退到 HTTP 模式（FLASK_HTTPS=0）。"
+    echo "警告：未检测到 openssl，将回退到 HTTP 模式（FLASK_HTTPS=0）。"
+    echo "如需启用 HTTPS，请先在系统中安装 openssl（例如：sudo apt install -y openssl），再重新执行 ./deploy.sh。"
     export FLASK_HTTPS=0
+else
+    echo "OpenSSL 已就绪。"
 fi
 
 # 不安装 Nginx：由 vConfig 在 80 端口提供 HTTP→HTTPS 跳转，需保证 80 端口未被占用（若曾安装 Nginx 可 systemctl stop nginx）
 
-echo "[2/7] 检查并安装 Python3..."
+echo "[2/7] 检查 Python3 环境..."
 PYTHON_CMD=""
 if command -v python3 &>/dev/null && python3 -c 'import sys; exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null; then
     PYTHON_CMD=python3
@@ -105,21 +104,15 @@ elif command -v python &>/dev/null && python -c 'import sys; exit(0 if sys.versi
     PYTHON_CMD=python
 fi
 if [ -z "$PYTHON_CMD" ]; then
-    echo "未检测到 Python 3.8+，正在尝试自动安装..."
-    _install_python3 || true
-    command -v python3 &>/dev/null && PYTHON_CMD=python3
-    command -v python &>/dev/null && [ -z "$PYTHON_CMD" ] && python -c 'import sys; exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null && PYTHON_CMD=python
-fi
-if [ -z "$PYTHON_CMD" ]; then
-    echo "未检测到 Python 3.8+，已尝试自动安装。若仍失败，请手动安装后重新运行。"
+    echo "未检测到 Python 3.8+。"
+    echo "请先在系统中安装 Python 3.8+ 及 venv/pip 再执行 ./deploy.sh。"
+    if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
+        echo "例如：sudo apt install -y python3 python3-venv python3-pip"
+    fi
     exit 1
 fi
 
 echo "检查 Python venv 模块支持..."
-if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
-    echo "未检测到 venv 模块，正在尝试安装 python3-venv/python3-pip..."
-    _install_python3 || true
-fi
 if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
     echo "当前 Python 环境缺少 venv 模块，无法创建虚拟环境。"
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
@@ -132,10 +125,13 @@ fi
 
 echo "[3/7] 检查并安装 SNMP 客户端(snmpwalk)..."
 if ! command -v snmpwalk &>/dev/null; then
-    echo "未检测到 snmpwalk，正在尝试自动安装（失败会自动忽略，仅影响手工测试）..."
-    _install_snmp || true
+    echo "提示：未检测到 snmpwalk，仅影响手工测试，不影响自动发现功能。"
+    if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
+        echo "如需在服务器上手工测试 SNMP，可执行: sudo apt install -y snmp"
+    fi
+else
+    echo "SNMP 客户端已就绪 (snmpwalk)。"
 fi
-command -v snmpwalk &>/dev/null && echo "SNMP 客户端已就绪 (snmpwalk)。" || echo "提示：未安装 snmpwalk，仅影响手工测试，不影响自动发现功能。"
 
 echo "[4/7] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
