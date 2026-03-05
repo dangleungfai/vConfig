@@ -1277,6 +1277,49 @@ async function initDiscoveryModule() {
     });
 }
 
+let _discoveryStatusTimer = null;
+let _discoveryStatusMap = {};
+let _discoveryLogTimer = null;
+let _currentDiscoveryLogRuleId = null;
+
+async function refreshDiscoveryStatuses() {
+    try {
+        const res = await fetch(`${API}/discovery/rules/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.items || [];
+        const map = {};
+        items.forEach(j => {
+            if (!j || j.rule_id == null) return;
+            map[String(j.rule_id)] = j;
+        });
+        _discoveryStatusMap = map;
+        const tbody = document.getElementById('discovery-rule-list');
+        if (!tbody) return;
+        tbody.querySelectorAll('[data-discovery-run]').forEach(btn => {
+            const id = btn.getAttribute('data-discovery-run');
+            if (!id) return;
+            const st = _discoveryStatusMap[id];
+            if (st && st.status === 'running') {
+                btn.disabled = true;
+                btn.textContent = '运行中...';
+            } else {
+                btn.disabled = false;
+                btn.textContent = '运行';
+            }
+        });
+        const anyRunning = items.some(j => j && j.status === 'running');
+        if (anyRunning && !_discoveryStatusTimer) {
+            _discoveryStatusTimer = setInterval(refreshDiscoveryStatuses, 3000);
+        } else if (!anyRunning && _discoveryStatusTimer) {
+            clearInterval(_discoveryStatusTimer);
+            _discoveryStatusTimer = null;
+        }
+    } catch (e) {
+        // ignore polling errors
+    }
+}
+
 async function loadDiscoveryRules() {
     const tbody = document.getElementById('discovery-rule-list');
     if (!tbody) return;
@@ -1321,24 +1364,15 @@ async function loadDiscoveryRules() {
                     const data = await res.json();
                     if (!res.ok || !data.ok) {
                         toast(data.error || '执行规则失败', 'error');
+                        btn.disabled = false;
+                        btn.textContent = '运行';
                     } else {
-                        toast(`扫描 ${data.scanned || 0} 个 IP，新增 ${data.added_count || 0} 台设备`, 'success');
-                        // 自动刷新设备列表
-                        try { loadDevices(true); } catch (_) {}
+                        toast('已提交自动发现任务，正在后台运行…', 'success');
+                        // 后续按钮状态与日志由轮询接口刷新
+                        refreshDiscoveryStatuses();
                     }
-                    // 无论成功或失败，都尝试拉取并展示最近的持久化日志
-                    try {
-                        const logRes = await fetch(`${API}/discovery/rules/${id}/logs`);
-                        const logData = await logRes.json();
-                        if (logRes.ok && logData.logs) {
-                            openDiscoveryLogModal(logData);
-                        }
-                    } catch (_) {}
                 } catch (e) {
                     toast('执行规则失败，请稍后重试', 'error');
-                } finally {
-                    btn.disabled = false;
-                    btn.textContent = '运行';
                 }
             });
         });
@@ -1393,6 +1427,9 @@ async function loadDiscoveryRules() {
                 }
             });
         });
+
+        // 初始加载一次状态，确保刷新或切换页面后仍能看到运行中的任务
+        refreshDiscoveryStatuses();
 
         tbody.querySelectorAll('[data-discovery-delete]').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -1516,12 +1553,23 @@ function closeDiscoveryRuleModal() {
     currentEditingDiscoveryRuleId = null;
 }
 
+document.getElementById('btn-discovery-log-close')?.addEventListener('click', () => {
+    const modal = document.getElementById('modal-discovery-log');
+    if (modal) modal.classList.remove('show');
+    if (_discoveryLogTimer) {
+        clearInterval(_discoveryLogTimer);
+        _discoveryLogTimer = null;
+    }
+    _currentDiscoveryLogRuleId = null;
+});
+
 function openDiscoveryLogModal(data) {
     const modal = document.getElementById('modal-discovery-log');
     if (!modal) return;
     const titleEl = document.getElementById('modal-discovery-log-title');
     const ruleInfoEl = document.getElementById('discovery-log-rule-info');
     const textEl = document.getElementById('discovery-log-text');
+    const statusEl = document.getElementById('discovery-log-status');
     const rule = data.rule || {};
     const logs = data.logs || [];
 
@@ -1535,6 +1583,9 @@ function openDiscoveryLogModal(data) {
         if (rule.snmp_community) parts.push(`Community：${rule.snmp_community}`);
         if (rule.device_group) parts.push(`分组：${rule.device_group}`);
         ruleInfoEl.textContent = parts.join(' | ') || '—';
+    }
+    if (statusEl) {
+        statusEl.textContent = '正在加载状态…';
     }
     if (textEl) {
         if (!logs.length) {
@@ -1565,6 +1616,73 @@ function openDiscoveryLogModal(data) {
             textEl.textContent = lines.join('\n');
         }
     }
+    _currentDiscoveryLogRuleId = rule.id || null;
+    if (_discoveryLogTimer) {
+        clearInterval(_discoveryLogTimer);
+        _discoveryLogTimer = null;
+    }
+    const refreshNow = async () => {
+        const rid = _currentDiscoveryLogRuleId;
+        if (!rid) return;
+        try {
+            const res = await fetch(`${API}/discovery/rules/${rid}/status`);
+            if (!res.ok) {
+                if (statusEl) statusEl.textContent = '状态获取失败，请稍后重试。';
+                return;
+            }
+            const job = await res.json();
+            if (!job || !job.status) {
+                if (statusEl) statusEl.textContent = '暂无正在运行的任务。';
+                return;
+            }
+            if (statusEl) {
+                if (job.status === 'running') {
+                    statusEl.textContent = `运行中… 已扫描 ${job.scanned || 0} 个 IP，新增 ${job.added_count || 0} 台设备`;
+                } else if (job.status === 'success') {
+                    statusEl.textContent = `已完成：扫描 ${job.scanned || 0} 个 IP，新增 ${job.added_count || 0} 台设备`;
+                } else {
+                    statusEl.textContent = `任务失败：${job.error || ''}`;
+                }
+            }
+            if (job.status !== 'running') {
+                // 任务完成后刷新一次完整日志
+                try {
+                    const logRes = await fetch(`${API}/discovery/rules/${rid}/logs`);
+                    const logData = await logRes.json();
+                    if (logRes.ok && logData.logs && textEl) {
+                        const logs2 = logData.logs || [];
+                        const lines2 = [];
+                        logs2.forEach((log, idx) => {
+                            lines2.push(`【第 ${logs2.length - idx} 条】`);
+                            lines2.push(`时间：${log.started_at || ''} ~ ${log.finished_at || ''}`);
+                            lines2.push(`扫描 IP 数：${log.scanned || 0}，新增设备数：${log.added_count || 0}`);
+                            const added = log.added || [];
+                            if (added.length) {
+                                lines2.push('新增设备：');
+                                added.forEach(d => {
+                                    lines2.push(`  - ${d.ip || ''}  ${d.hostname || ''}  类型：${d.device_type || ''}`);
+                                });
+                            }
+                            const skipped = log.skipped || [];
+                            if (skipped.length) {
+                                lines2.push('跳过 IP：');
+                                skipped.forEach(s => {
+                                    const hostPart = (s.hostname && s.reason === 'exists') ? ` (${s.hostname})` : '';
+                                    lines2.push(`  - ${s.ip || ''}${hostPart}  原因：${s.reason || ''}`);
+                                });
+                            }
+                            lines2.push('');
+                        });
+                        textEl.textContent = lines2.join('\n');
+                    }
+                } catch (_) {}
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = '状态获取失败，请稍后重试。';
+        }
+    };
+    refreshNow();
+    _discoveryLogTimer = setInterval(refreshNow, 3000);
     modal.classList.add('show');
 }
 

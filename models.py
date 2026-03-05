@@ -392,3 +392,30 @@ class AutoDiscoveryRunLog(db.Model):
             'added': json.loads(self.added_json or '[]'),
             'skipped': json.loads(self.skipped_json or '[]'),
         }
+
+
+class AutoDiscoveryJob(db.Model):
+    """自动发现异步任务：用于跟踪某条规则最近一次手动执行的后台状态。"""
+    __tablename__ = 'auto_discovery_jobs'
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey('auto_discovery_rules.id'), nullable=False, index=True)
+    status = db.Column(db.String(32), default='running', index=True)  # running / success / failed
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    scanned = db.Column(db.Integer, default=0)
+    added_count = db.Column(db.Integer, default=0)
+    error = db.Column(db.Text, nullable=True)
+    log_id = db.Column(db.Integer, db.ForeignKey('auto_discovery_run_logs.id'), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'rule_id': self.rule_id,
+            'status': self.status,
+            'started_at': _isoformat_utc(self.started_at),
+            'finished_at': _isoformat_utc(self.finished_at),
+            'scanned': self.scanned,
+            'added_count': self.added_count,
+            'error': self.error or '',
+            'log_id': self.log_id,
+        }

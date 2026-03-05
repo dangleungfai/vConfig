@@ -22,7 +22,7 @@ from config import (
     BACKUP_THREAD_NUM, EXCLUDE_PATTERNS, DEFAULT_CONNECTION_TYPE, SSH_PORT,
     BACKUP_RETENTION_DAYS, DEFAULT_TIMEZONE, DATA_ROOT, CERTS_DIR,
 )
-from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, _isoformat_utc
+from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, AutoDiscoveryJob, _isoformat_utc
 from device_drivers import register_driver, load_custom_drivers
 from device_drivers.builtin import register_builtin_drivers
 from compliance import check_config
@@ -2479,8 +2479,12 @@ def _snmp_get(ip: str, oid: str, community: str, timeout_ms: int, retries: int, 
         return None
 
 
-def _execute_discovery_rule(rule_id):
-    """内部：执行某条自动发现规则，不校验权限。返回 dict(ok, scanned, added_count, added, skipped, log_id, error)。"""
+def _execute_discovery_rule(rule_id, job_id=None):
+    """内部：执行某条自动发现规则，不校验权限。
+
+    若提供 job_id，则在 AutoDiscoveryJob 中实时更新 scanned/added_count 等进度信息。
+    返回 dict(ok, scanned, added_count, added, skipped, log_id, error)。
+    """
     _ensure_tables()
     rule = AutoDiscoveryRule.query.get_or_404(rule_id)
     if not rule.enabled:
@@ -2503,6 +2507,13 @@ def _execute_discovery_rule(rule_id):
     scanned_ips = []
     error_msg = ''
     success = True
+
+    job = None
+    if job_id is not None:
+        try:
+            job = AutoDiscoveryJob.query.get(job_id)
+        except Exception:
+            job = None
 
     try:
         # 强制使用最新设备表：结束可能存在的旧事务并清空会话缓存（定时任务线程可能沿用旧会话）
@@ -2550,6 +2561,15 @@ def _execute_discovery_rule(rule_id):
             )
             db.session.add(dev)
             added_devices.append({'ip': ip, 'hostname': hostname, 'device_type': dev_type})
+
+            # 周期性更新任务进度（避免过于频繁地写数据库）
+            if job is not None and len(scanned_ips) % 10 == 0:
+                try:
+                    job.scanned = len(scanned_ips)
+                    job.added_count = len(added_devices)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
         # 正常情况下先提交设备变更
         db.session.commit()
     except Exception as e:
@@ -2595,12 +2615,83 @@ def _execute_discovery_rule(rule_id):
 
 @app.route('/api/discovery/rules/<int:rule_id>/run', methods=['POST'])
 def run_discovery_rule(rule_id):
-    """执行某条自动发现规则（API 入口，校验权限）"""
+    """执行某条自动发现规则（API 入口，校验权限，异步后台任务）"""
     _ensure_tables()
     if not _can_edit_settings():
         return jsonify({'error': '当前账号无权操作，请使用管理员账号登录。'}), 403
-    resp = _execute_discovery_rule(rule_id)
-    return jsonify(resp), (200 if resp.get('ok') else 500)
+    from datetime import datetime
+    rule = AutoDiscoveryRule.query.get_or_404(rule_id)
+    job = AutoDiscoveryJob(
+        rule_id=rule.id,
+        status='running',
+        started_at=datetime.utcnow(),
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    def _run_job_async(job_id: int, r_id: int):
+        with app.app_context():
+            job_obj = AutoDiscoveryJob.query.get(job_id)
+            if not job_obj or job_obj.status != 'running':
+                return
+            from datetime import datetime as _dt
+            try:
+                resp = _execute_discovery_rule(r_id, job_id=job_id)
+                job_obj.scanned = int(resp.get('scanned') or 0)
+                job_obj.added_count = int(resp.get('added_count') or 0)
+                job_obj.log_id = resp.get('log_id')
+                job_obj.status = 'success' if resp.get('ok') else 'failed'
+                job_obj.error = (resp.get('error') or '') if not resp.get('ok') else ''
+            except Exception as e:
+                job_obj.status = 'failed'
+                job_obj.error = str(e)
+            finally:
+                job_obj.finished_at = _dt.utcnow()
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+    t = threading.Thread(target=_run_job_async, args=(job.id, rule.id), daemon=True)
+    t.start()
+
+    return jsonify({'ok': True, 'job_id': job.id}), 200
+
+
+@app.route('/api/discovery/rules/status', methods=['GET'])
+def discovery_rule_statuses():
+    """返回每条自动发现规则最近一次任务的状态，用于前端轮询按钮状态。"""
+    _ensure_tables()
+    from sqlalchemy import func
+    subq = (
+        db.session.query(
+            AutoDiscoveryJob.rule_id,
+            func.max(AutoDiscoveryJob.id).label('max_id'),
+        )
+        .group_by(AutoDiscoveryJob.rule_id)
+        .subquery()
+    )
+    jobs = (
+        db.session.query(AutoDiscoveryJob)
+        .join(subq, (AutoDiscoveryJob.rule_id == subq.c.rule_id) & (AutoDiscoveryJob.id == subq.c.max_id))
+        .all()
+    )
+    return jsonify({'items': [j.to_dict() for j in jobs]})
+
+
+@app.route('/api/discovery/rules/<int:rule_id>/status', methods=['GET'])
+def discovery_rule_status(rule_id):
+    """返回指定规则最近一次任务的状态，用于运行日志弹窗实时刷新。"""
+    _ensure_tables()
+    job = (
+        AutoDiscoveryJob.query
+        .filter_by(rule_id=rule_id)
+        .order_by(AutoDiscoveryJob.id.desc())
+        .first()
+    )
+    if not job:
+        return jsonify({}), 200
+    return jsonify(job.to_dict())
 
 
 @app.route('/api/discovery/rules/<int:rule_id>/logs', methods=['GET'])

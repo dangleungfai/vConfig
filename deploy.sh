@@ -123,7 +123,23 @@ if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "[3/7] 检查并安装 SNMP 客户端(snmpwalk)..."
+echo "[3/7] 检查并安装 sqlite3 客户端..."
+if ! command -v sqlite3 &>/dev/null; then
+    if command -v apt-get &>/dev/null; then
+        echo "未检测到 sqlite3，正在通过 apt-get 安装..."
+        sudo apt-get update && sudo apt-get install -y sqlite3
+    elif command -v apt &>/dev/null; then
+        echo "未检测到 sqlite3，正在通过 apt 安装..."
+        sudo apt update && sudo apt install -y sqlite3
+    else
+        echo "未检测到 sqlite3，且无法自动安装。请在系统中先手动安装 sqlite3 后再执行 ./deploy.sh。"
+        exit 1
+    fi
+else
+    echo "sqlite3 已就绪。"
+fi
+
+echo "[4/7] 检查并安装 SNMP 客户端(snmpwalk)..."
 if ! command -v snmpwalk &>/dev/null; then
     echo "提示：未检测到 snmpwalk，仅影响手工测试，不影响自动发现功能。"
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
@@ -133,7 +149,7 @@ else
     echo "SNMP 客户端已就绪 (snmpwalk)。"
 fi
 
-echo "[4/7] 创建虚拟环境并安装依赖..."
+echo "[5/7] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
     "$PYTHON_CMD" -m venv venv
     ./venv/bin/pip install -q --upgrade pip
@@ -142,14 +158,14 @@ else
     ./venv/bin/pip install -q -r requirements.txt
 fi
 
-echo "[5/7] 初始化数据目录与数据库..."
+echo "[6/7] 初始化数据目录与数据库..."
 mkdir -p data data/configs data/log
 if [ ! -f vconfig.db ] && [ ! -f config_backup.db ] && [ ! -f data/vconfig.db ] && [ ! -f data/config_backup.db ]; then
     ./venv/bin/flask --app app init-db
 fi
 ./venv/bin/flask --app app reset-admin-password
 
-echo "[6/7] 确定监听端口与访问地址..."
+echo "[7/7] 确定监听端口与访问地址..."
 DEFAULT_PORT="443"
 [ "$(id -u)" != "0" ] && DEFAULT_PORT="8443"
 if [ -z "$FLASK_PORT" ]; then

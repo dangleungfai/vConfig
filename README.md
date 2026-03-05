@@ -116,7 +116,7 @@ vConfig/
 
 ```bash
 sudo apt update
-sudo apt install -y openssl python3 python3-venv python3-pip snmp
+sudo apt install -y openssl python3 python3-venv python3-pip sqlite3 snmp
 ```
 
 ### 2. 安装 Git 并克隆仓库
