@@ -65,9 +65,9 @@ _kill_port_if_used() {
 
 _install_python3() {
     if command -v apt-get &>/dev/null; then
-        sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip
+        sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip python3.10-venv
     elif command -v apt &>/dev/null; then
-        sudo apt update && sudo apt install -y python3 python3-venv python3-pip
+        sudo apt update && sudo apt install -y python3 python3-venv python3-pip python3.10-venv
     elif command -v dnf &>/dev/null; then
         sudo dnf install -y python3 python3-pip
     elif command -v yum &>/dev/null; then
