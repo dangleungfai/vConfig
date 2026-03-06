@@ -32,13 +32,13 @@
                 <span>{{ system_name or '配置备份中心' }}</span>
             </a>
             <nav class="nav-tabs">
-                <a href="#" data-tab="dashboard" class="tab active">仪表盘</a>
-                <a href="#" data-tab="devices" class="tab">设备管理</a>
-                <a href="#" data-tab="backup" class="tab">备份任务</a>
-                <a href="#" data-tab="logs" class="tab">备份日志</a>
-                <a href="#" data-tab="configs" class="tab">备份配置</a>
-                <a href="#" data-tab="config-changes" class="tab">配置变动</a>
-                <a href="#" data-tab="settings" class="tab">系统设置</a>
+                <a href="#" data-tab="dashboard" class="tab active" data-i18n="nav_dashboard">仪表盘</a>
+                <a href="#" data-tab="devices" class="tab" data-i18n="nav_devices">设备管理</a>
+                <a href="#" data-tab="backup" class="tab" data-i18n="nav_backup">备份任务</a>
+                <a href="#" data-tab="logs" class="tab" data-i18n="nav_logs">备份日志</a>
+                <a href="#" data-tab="configs" class="tab" data-i18n="nav_configs">备份配置</a>
+                <a href="#" data-tab="config-changes" class="tab" data-i18n="nav_config_changes">配置变动</a>
+                <a href="#" data-tab="settings" class="tab" data-i18n="nav_settings">系统设置</a>
             </nav>
             <div class="header-right">
             <div class="theme-switcher" id="theme-switcher">
@@ -53,7 +53,7 @@
             {% if current_user %}
             <span class="header-user">{{ current_user }}</span>
             {% endif %}
-            <a href="{{ url_for('logout_view') }}" class="tab header-logout">退出</a>
+            <a href="{{ url_for('logout_view') }}" class="tab header-logout" data-i18n="btn_logout">退出</a>
             </div>
         </div>
     </header>
@@ -68,6 +68,8 @@
         <span class="app-footer-custom" id="footer-custom">{{ footer_text or '' }}</span>
     </footer>
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    <script>window.__INIT_LANG = '{{ language | default("zh") }}';</script>
+    <script src="{{ url_for('static', filename='i18n.js') }}{% if static_version %}?v={{ static_version }}{% endif %}"></script>
     <script src="{{ url_for('static', filename='app.js') }}{% if static_version %}?v={{ static_version }}{% endif %}"></script>
 </body>
 </html>

@@ -825,6 +825,8 @@ def _get_default_settings():
         'discovery_frequency': 'twice_daily',
         # 自动发现添加设备唯一性：hostname | ip，默认 hostname
         'discovery_unique_by': 'hostname',
+        # 系统界面语言：zh | en，默认 zh
+        'language': 'zh',
     }
 
 
@@ -3797,6 +3799,7 @@ def inject_footer_vars():
             'current_user': session.get('user') or '',
             'static_version': 2,  # 静态资源版本，改版后递增以强制浏览器拉取最新 JS/CSS
             'logo_url': logo_url,
+            'language': _get_setting('language', 'zh') or 'zh',
         }
     except Exception:
         return {
@@ -3807,6 +3810,7 @@ def inject_footer_vars():
             'current_user': session.get('user') or '',
             'static_version': 2,
             'logo_url': '',
+            'language': 'zh',
         }
 
 
@@ -3947,6 +3951,7 @@ def get_settings():
         'default_connection_type': _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'SSH',
         'backup_retention_days': _get_setting('backup_retention_days', str(BACKUP_RETENTION_DAYS)),
         'timezone': _get_setting('timezone', DEFAULT_TIMEZONE),
+        'language': _get_setting('language', 'zh') or 'zh',
         'footer_text': _get_setting('footer_text', ''),
         'logo_enabled': '1' if _get_setting('logo_file', '') else '0',
         'logo_url': url_for('logo') if _get_setting('logo_file', '') else '',
@@ -4302,6 +4307,9 @@ def update_settings():
             _set_setting('backup_retention_days', str(BACKUP_RETENTION_DAYS))
     if data.get('timezone') is not None:
         _set_setting('timezone', str(data['timezone']).strip() or DEFAULT_TIMEZONE)
+    if data.get('language') is not None:
+        lang = (str(data.get('language') or 'zh').strip().lower())
+        _set_setting('language', lang if lang in ('zh', 'en') else 'zh')
     # 页脚文案：每次保存都写入（保证可重复保存）
     _set_setting('footer_text', (str(data.get('footer_text', '') or '').strip())[:500])
     # LDAP 参数
@@ -4809,11 +4817,25 @@ _DIFF_IGNORE_PATTERNS = [
     re.compile(r'^\s*ntp\s+clock-period\s+\d+\s*$', re.IGNORECASE),
 ]
 
+# 配置对比时用于「忽略时间戳」的正则：匹配行内日期时间（如 2026-03-06 12:54:39.239 +16:52），对比前会从行中移除
+_DIFF_TIMESTAMP_PATTERN = re.compile(
+    r'\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{1,2}:\d{2})?'
+)
+
+
+def _diff_canonical_line(line: str) -> str:
+    """将一行规范化为用于对比的键：去掉时间戳后 strip，便于忽略仅时间戳不同的变动。"""
+    if not line:
+        return line
+    t = _DIFF_TIMESTAMP_PATTERN.sub('', line).strip()
+    return t if t else line
+
 
 def _diff_config_lines(content_old, content_new):
     """对比两份配置文本，按行集合差集得到新增行与删除行。返回 (added_list, removed_list)。
 
     会先过滤掉一些「噪声行」，例如设备当前时间等每次备份都会变化、但不算真实配置变更的内容。
+    对比时忽略行内时间戳（如 2026-03-06 12:54:39.239 +16:52），仅时间戳不同的行视为同一行。
     """
 
     def _norm_lines(text: str):
@@ -4834,10 +4856,11 @@ def _diff_config_lines(content_old, content_new):
 
     lines_old = _norm_lines(content_old)
     lines_new = _norm_lines(content_new)
-    set_old = set(lines_old)
-    set_new = set(lines_new)
-    added = sorted(set_new - set_old)
-    removed = sorted(set_old - set_new)
+    # 按「规范化行」（去掉时间戳）做差集，避免仅时间戳不同的行被算作新增/删除
+    old_canonical = {_diff_canonical_line(ln) for ln in lines_old}
+    new_canonical = {_diff_canonical_line(ln) for ln in lines_new}
+    added = sorted(ln for ln in lines_new if _diff_canonical_line(ln) not in old_canonical)
+    removed = sorted(ln for ln in lines_old if _diff_canonical_line(ln) not in new_canonical)
     return (added, removed)
 
 

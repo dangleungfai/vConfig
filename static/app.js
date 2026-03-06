@@ -1091,6 +1091,7 @@ function startFooterTimeTicker() {
 
 // 页面加载：用服务端注入的 data-timezone 启动时间（不依赖接口），再恢复 tab / 仪表盘
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.applyI18n) window.applyI18n();
     startFooterTimeTicker();
     applyDashboardCardOrder();
     initDashboardCardDrag();
@@ -4065,6 +4066,20 @@ async function loadSettings() {
             tzEl.value = tz;
         }
     }
+    const langEl = document.getElementById('setting-language');
+    if (langEl) {
+        const lang = (pick('language', d.language || 'zh') || 'zh').toLowerCase();
+        langEl.value = (lang === 'en' ? 'en' : 'zh');
+    }
+    if (d.language !== undefined) {
+        const lang = (d.language || 'zh').toLowerCase();
+        const next = (lang === 'en' ? 'en' : 'zh');
+        if (window.__LANG !== next) {
+            window.__LANG = next;
+            try { window.localStorage.setItem('vconfig_lang', next); } catch (_) {}
+            if (window.applyI18n) window.applyI18n();
+        }
+    }
     const freq = pick('backup_frequency', d.backup_frequency || 'none') || 'none';
     setBackupFrequencyDisplay(freq);
     if (freq === 'custom') {
@@ -4108,6 +4123,7 @@ async function loadSettings() {
             'setting-retention-days',
             'setting-default-connection-type',
             'setting-timezone',
+            'setting-language',
             'setting-footer-text',
             'setting-backup-frequency',
             'setting-custom-cron',
@@ -4261,6 +4277,7 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             default_connection_type: document.getElementById('setting-default-connection-type').value,
             backup_retention_days: isNaN(retentionVal) ? 30 : Math.max(0, Math.min(3650, retentionVal)),
             timezone: document.getElementById('setting-timezone').value || 'Asia/Shanghai',
+            language: (document.getElementById('setting-language') && document.getElementById('setting-language').value) || 'zh',
             footer_text: (document.getElementById('setting-footer-text') ? document.getElementById('setting-footer-text').value : '') + '',
             session_timeout_minutes: parseInt(document.getElementById('setting-session-timeout')?.value, 10) || 0,
             login_lockout_attempts: parseInt(document.getElementById('setting-login-lockout-attempts')?.value, 10) || 0,
@@ -4299,9 +4316,15 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
         })
     });
     if (res.ok) {
-        toast('设置已保存', 'success');
+        const lang = (document.getElementById('setting-language') && document.getElementById('setting-language').value) || 'zh';
+        try { window.localStorage.setItem('vconfig_lang', lang); } catch (_) {}
+        toast(window.t ? window.t('toast_settings_saved') : '设置已保存', 'success');
         loadFooterInfo();
         try { window.localStorage.removeItem(SETTINGS_DRAFT_KEY); } catch (_) {}
+        if (window.__LANG !== lang) {
+            window.__LANG = lang;
+            window.location.reload();
+        }
     }
 });
 
@@ -4653,6 +4676,7 @@ function initSettingsDraftWatchers() {
         'setting-retention-days': 'backup_retention_days',
         'setting-default-connection-type': 'default_connection_type',
         'setting-timezone': 'timezone',
+        'setting-language': 'language',
         'setting-footer-text': 'footer_text',
         'setting-system-name': 'system_name',
         'setting-ldap-server': 'ldap_server',

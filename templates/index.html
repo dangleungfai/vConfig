@@ -5,14 +5,14 @@
 <div id="panel-dashboard" class="panel active">
     <div class="dashboard-header">
         <div class="dashboard-header-left">
-            <h1 class="dashboard-title">运维概览</h1>
-            <p class="dashboard-desc">配置备份可观测与快捷操作</p>
+            <h1 class="dashboard-title" data-i18n="dashboard_title">运维概览</h1>
+            <p class="dashboard-desc" data-i18n="dashboard_desc">配置备份可观测与快捷操作</p>
         </div>
         <div class="dashboard-quick-actions">
-            <button type="button" class="btn btn-primary" id="dashboard-btn-backup">立即全量备份</button>
-            <a href="#" class="tab btn btn-secondary" data-tab="devices">设备管理</a>
-            <a href="#" class="tab btn btn-secondary" data-tab="logs">查看日志</a>
-            <a href="#" class="tab btn btn-secondary" data-tab="configs">已备份配置</a>
+            <button type="button" class="btn btn-primary" id="dashboard-btn-backup" data-i18n="dashboard_btn_backup">立即全量备份</button>
+            <a href="#" class="tab btn btn-secondary" data-tab="devices" data-i18n="nav_devices">设备管理</a>
+            <a href="#" class="tab btn btn-secondary" data-tab="logs" data-i18n="nav_logs">查看日志</a>
+            <a href="#" class="tab btn btn-secondary" data-tab="configs" data-i18n="nav_configs">已备份配置</a>
         </div>
     </div>
     <div class="stats-cards" id="dashboard-stats">
@@ -110,7 +110,7 @@
 <!-- 配置变动：集中展示本次备份的配置变动 -->
 <div id="panel-config-changes" class="panel">
     <header class="panel-header">
-        <h2>配置变动</h2>
+        <h2 data-i18n="panel_config_changes">配置变动</h2>
         <p class="form-hint" style="margin-top:0.25rem;">展示最近一次备份任务中，各设备「最新备份」与「上一份备份」之间的配置变动。左侧选择设备，右侧自动展示该设备的新增/删除命令。</p>
     </header>
     <div class="panel-body config-changes-layout">
@@ -144,7 +144,7 @@
 
 <div id="panel-devices" class="panel">
     <header class="panel-header">
-        <h2>设备列表</h2>
+        <h2 data-i18n="panel_device_list">设备列表</h2>
         <div class="panel-actions">
             <button class="btn btn-primary" id="btn-add-device">+ 添加</button>
             <button class="btn btn-secondary" id="btn-create-device-group">分组</button>
@@ -156,7 +156,7 @@
         </div>
     </header>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="filter-search" placeholder="搜索 IP / 主机名">
+        <input type="text" id="filter-search" placeholder="搜索 主机名 / 管理 IP">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-device-search">搜索</button>
     </div>
     <div class="table-wrap">
@@ -213,7 +213,7 @@
 
 <div id="panel-backup" class="panel">
     <header class="panel-header">
-        <h2>执行备份</h2>
+        <h2 data-i18n="panel_backup">执行备份</h2>
         <button class="btn btn-primary" id="btn-run-backup">立即备份</button>
     </header>
     <div id="backup-status" class="backup-progress-wrap">
@@ -268,10 +268,10 @@
 
 <div id="panel-logs" class="panel">
     <header class="panel-header">
-        <h2>备份日志</h2>
+        <h2 data-i18n="panel_logs">备份日志</h2>
     </header>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="log-search" placeholder="主机名或管理 IP">
+        <input type="text" id="log-search" placeholder="搜索 主机名 / 管理 IP">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs">搜索</button>
     </div>
     <div class="table-wrap table-resizable">
@@ -320,7 +320,7 @@
 
 <div id="panel-configs" class="panel">
     <header class="panel-header">
-        <h2>已备份配置</h2>
+        <h2 data-i18n="panel_configs">已备份配置</h2>
         <div class="config-content-search-wrap">
             <input type="text" id="config-search-text" class="config-content-search-input" placeholder="搜索配置内容（如 ACL、IP、命令片段）" aria-label="全文搜索配置">
             <button type="button" class="btn config-content-search-btn" id="btn-config-search">搜索</button>
@@ -328,7 +328,7 @@
     </header>
     <div class="config-search-result config-search-result--empty" id="config-search-result"></div>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="config-filter-search" placeholder="搜索 主机名 / 管理IP / 设备类型" aria-label="过滤设备列表">
+        <input type="text" id="config-filter-search" placeholder="搜索 主机名 / 管理 IP" aria-label="过滤设备列表">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-config-filter-search">搜索</button>
     </div>
     <div class="table-wrap">
@@ -467,9 +467,9 @@
 
 <div id="panel-settings" class="panel">
     <header class="panel-header">
-        <h2>系统设置</h2>
+        <h2 data-i18n="panel_settings">系统设置</h2>
         <div class="panel-header-actions">
-            <button class="btn btn-primary" id="btn-save-settings">保存</button>
+            <button class="btn btn-primary" id="btn-save-settings" data-i18n="btn_save">保存</button>
             <button class="btn btn-secondary" id="btn-reset-settings-defaults" title="将所有系统设置恢复为系统默认参数值">恢复默认设置</button>
             <button class="btn btn-secondary" id="btn-restart-service" title="重启后备份频率等设置方可完全生效">重启服务</button>
         </div>
@@ -477,18 +477,18 @@
     <div class="form">
         <div class="settings-layout">
             <aside class="settings-sidebar">
-                <button type="button" class="settings-nav-item active" data-settings-section="general">通用设置</button>
-                <button type="button" class="settings-nav-item" data-settings-section="backup">备份设置</button>
-                <button type="button" class="settings-nav-item" data-settings-section="discovery">自动发现</button>
-                <button type="button" class="settings-nav-item" data-settings-section="device-types">设备类型</button>
-                <button type="button" class="settings-nav-item" data-settings-section="auth">认证设置</button>
-                <button type="button" class="settings-nav-item" data-settings-section="users">用户管理</button>
-                <button type="button" class="settings-nav-item" data-settings-section="db-backup">数据备份</button>
+                <button type="button" class="settings-nav-item active" data-settings-section="general" data-i18n="settings_general">通用设置</button>
+                <button type="button" class="settings-nav-item" data-settings-section="backup" data-i18n="settings_backup">备份设置</button>
+                <button type="button" class="settings-nav-item" data-settings-section="discovery" data-i18n="settings_discovery">自动发现</button>
+                <button type="button" class="settings-nav-item" data-settings-section="device-types" data-i18n="settings_device_types">设备类型</button>
+                <button type="button" class="settings-nav-item" data-settings-section="auth" data-i18n="settings_auth">认证设置</button>
+                <button type="button" class="settings-nav-item" data-settings-section="users" data-i18n="settings_users">用户管理</button>
+                <button type="button" class="settings-nav-item" data-settings-section="db-backup" data-i18n="settings_db_backup">数据备份</button>
             </aside>
             <div class="settings-content settings-sections">
                 <!-- 通用设置 (含会话超时/登录锁定/密码复杂度/每页条数) -->
                 <section class="settings-section active" id="settings-section-general">
-                    <h3 class="settings-subtitle">通用设置</h3>
+                    <h3 class="settings-subtitle" data-i18n="settings_general">通用设置</h3>
                     <div class="form-row">
                         <label>系统名称</label>
                         <input type="text" id="setting-system-name" placeholder="如：配置备份中心">
@@ -504,6 +504,14 @@
                             <option value="America/New_York">纽约 (America/New_York)</option>
                             <option value="Europe/London">伦敦 (Europe/London)</option>
                         </select>
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="label_system_language">系统语言</label>
+                        <select id="setting-language">
+                            <option value="zh">简体中文</option>
+                            <option value="en">English</option>
+                        </select>
+                        <span class="form-hint" data-i18n="hint_system_language">切换界面显示语言，保存后刷新生效</span>
                     </div>
                     <div class="form-row">
                         <label>页脚信息（版权、备案号等）</label>
