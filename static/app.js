@@ -3118,11 +3118,11 @@ let logPerPage = 50;
 let logSortBy = 'created_at';
 let logSortDir = 'desc';
 async function loadLogs() {
-    const hostname = document.getElementById('log-hostname').value;
+    const search = (document.getElementById('log-search') || document.getElementById('log-hostname'))?.value?.trim() || '';
     const perPageEl = document.getElementById('log-per-page');
     if (perPageEl) logPerPage = parseInt(perPageEl.value, 10) || 50;
     let url = `${API}/logs?page=${logPage}&per_page=${logPerPage}&sort_by=${encodeURIComponent(logSortBy)}&sort_dir=${encodeURIComponent(logSortDir)}`;
-    if (hostname) url += `&hostname=${encodeURIComponent(hostname)}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     const res = await fetch(url);
     const data = await res.json();
     const tz = data.timezone || 'Asia/Shanghai';
@@ -3183,8 +3183,11 @@ function updateLogSortUI(currentBy, currentDir) {
     });
 }
 document.getElementById('btn-refresh-logs').addEventListener('click', () => { logPage = 1; loadLogs(); });
-document.getElementById('log-hostname').addEventListener('keypress', e => { if (e.key === 'Enter') loadLogs(); });
-document.getElementById('log-hostname').addEventListener('input', debounce(() => { logPage = 1; loadLogs(); }, 350));
+const logSearchEl = document.getElementById('log-search') || document.getElementById('log-hostname');
+if (logSearchEl) {
+    logSearchEl.addEventListener('keypress', e => { if (e.key === 'Enter') loadLogs(); });
+    logSearchEl.addEventListener('input', debounce(() => { logPage = 1; loadLogs(); }, 350));
+}
 document.getElementById('log-per-page')?.addEventListener('change', () => { logPage = 1; loadLogs(); });
 document.querySelectorAll('.log-sort-btn').forEach(btn => {
     btn.addEventListener('click', () => setLogSort(btn.getAttribute('data-sort-by')));
@@ -4047,6 +4050,11 @@ async function loadSettings() {
     } else if (hostnameSegEl) {
         hostnameSegEl.value = pick('discovery_hostname_segment_index', d.discovery_hostname_segment_index || '1');
     }
+    const discoveryUniqueByEl = document.getElementById('setting-discovery-unique-by');
+    if (discoveryUniqueByEl) {
+        const u = (pick('discovery_unique_by', d.discovery_unique_by || 'hostname') || 'hostname').toLowerCase();
+        discoveryUniqueByEl.value = (u === 'ip' ? 'ip' : 'hostname');
+    }
     const tzEl = document.getElementById('setting-timezone');
     if (tzEl) {
         const tz = (pick('timezone', d.timezone || 'Asia/Shanghai') || 'Asia/Shanghai').trim();
@@ -4105,6 +4113,7 @@ async function loadSettings() {
             'setting-custom-cron',
             'setting-discovery-frequency',
             'setting-discovery-custom-cron',
+            'setting-discovery-unique-by',
             'setting-session-timeout',
             'setting-login-lockout-attempts',
             'setting-login-lockout-minutes',
@@ -4280,6 +4289,7 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             // 允许清空：为空时不再强制回退为 '.'
             discovery_hostname_split_char: (document.getElementById('setting-discovery-hostname-split')?.value || '').trim(),
             discovery_hostname_segment_index: parseInt(document.getElementById('setting-discovery-hostname-segment')?.value, 10) || 1,
+            discovery_unique_by: (document.getElementById('setting-discovery-unique-by')?.value || 'hostname').trim().toLowerCase() || 'hostname',
             ldap_enabled: document.getElementById('setting-ldap-enabled')?.checked ? '1' : '0',
             ldap_server: document.getElementById('setting-ldap-server')?.value || '',
             ldap_base_dn: document.getElementById('setting-ldap-base-dn')?.value || '',
@@ -4656,6 +4666,7 @@ function initSettingsDraftWatchers() {
         'setting-telnet-port': 'telnet_port',
         'setting-discovery-hostname-split': 'discovery_hostname_split_char',
         'setting-discovery-hostname-segment': 'discovery_hostname_segment_index',
+        'setting-discovery-unique-by': 'discovery_unique_by',
     };
     Object.keys(map).forEach(id => {
         const el = document.getElementById(id);

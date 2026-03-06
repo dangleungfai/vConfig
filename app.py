@@ -823,6 +823,8 @@ def _get_default_settings():
         'snmp_retries': '1',
         # 自动发现频率：默认每 12 小时（0 点和 12 点）
         'discovery_frequency': 'twice_daily',
+        # 自动发现添加设备唯一性：hostname | ip，默认 hostname
+        'discovery_unique_by': 'hostname',
     }
 
 
@@ -2519,13 +2521,17 @@ def _execute_discovery_rule(rule_id, job_id=None):
         # 强制使用最新设备表：结束可能存在的旧事务并清空会话缓存（定时任务线程可能沿用旧会话）
         db.session.rollback()
         db.session.expire_all()
+        unique_by = (_get_setting('discovery_unique_by', 'hostname') or 'hostname').strip().lower()
+        if unique_by not in ('hostname', 'ip'):
+            unique_by = 'hostname'
         for ip in _iter_ip_ranges(rule.ip_range, limit=256):
             scanned_ips.append(ip)
-            # 以 IP 作为唯一性条件：若设备列表中已有该 IP，跳过添加
-            existing = Device.query.filter_by(ip=ip).first()
-            if existing:
-                skipped.append({'ip': ip, 'hostname': '', 'reason': 'exists'})
-                continue
+            # 唯一性按 IP 时：若设备列表中已有该 IP，跳过添加
+            if unique_by == 'ip':
+                existing = Device.query.filter_by(ip=ip).first()
+                if existing:
+                    skipped.append({'ip': ip, 'hostname': '', 'reason': 'exists'})
+                    continue
             # 必须获取到主机名才能添加
             hostname = _snmp_get(ip, hostname_oid, community, timeout_ms, retries, snmp_version=snmp_version) or ''
             hostname = hostname.strip()
@@ -2544,6 +2550,12 @@ def _execute_discovery_rule(rule_id, job_id=None):
                 parts = hostname.split(split_char)
                 taken = parts[:seg_one_based]
                 hostname = split_char.join(taken).strip()
+            # 唯一性按主机名时：若设备列表中已有该主机名，跳过添加
+            if unique_by == 'hostname':
+                existing = Device.query.filter_by(hostname=hostname).first()
+                if existing:
+                    skipped.append({'ip': ip, 'hostname': hostname, 'reason': 'exists'})
+                    continue
             # 必须获取到系统类型才能添加
             dev_type_raw = ''
             if device_type_oid:
@@ -3689,6 +3701,8 @@ def list_logs():
     default_pp = int(_get_setting('log_per_page_default', '50') or '50')
     per_page = min(request.args.get('per_page', default_pp, type=int), 100)
     hostname = request.args.get('hostname', '').strip()
+    ip = request.args.get('ip', '').strip()
+    search = request.args.get('search', '').strip()  # 同时匹配主机名或管理 IP
     status = request.args.get('status', '').strip()
     device_id = request.args.get('device_id', type=int)
     sort_by = (request.args.get('sort_by') or 'created_at').strip()
@@ -3710,8 +3724,19 @@ def list_logs():
     else:
         q = BackupLog.query.order_by(order_col.asc())
 
-    if hostname:
-        q = q.filter(BackupLog.hostname.ilike(f'%{hostname}%'))
+    if search:
+        from sqlalchemy import or_
+        q = q.filter(
+            or_(
+                BackupLog.hostname.ilike(f'%{search}%'),
+                BackupLog.ip.ilike(f'%{search}%'),
+            )
+        )
+    else:
+        if hostname:
+            q = q.filter(BackupLog.hostname.ilike(f'%{hostname}%'))
+        if ip:
+            q = q.filter(BackupLog.ip.ilike(f'%{ip}%'))
     if device_id:
         dev = Device.query.get(device_id)
         if dev:
@@ -3957,6 +3982,8 @@ def get_settings():
         'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', ''),
         # 默认「取前 1 段」
         'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '1'),
+        # 添加设备唯一性：hostname | ip
+        'discovery_unique_by': _get_setting('discovery_unique_by', 'hostname') or 'hostname',
         # LDAP
         'ldap_enabled': _get_setting('ldap_enabled', '0'),
         'ldap_server': _get_setting('ldap_server', ''),
@@ -4399,6 +4426,11 @@ def update_settings():
             _set_setting('discovery_hostname_segment_index', str(max(1, min(10, v))))
         except (TypeError, ValueError):
             _set_setting('discovery_hostname_segment_index', '1')
+    if 'discovery_unique_by' in data:
+        v = (data.get('discovery_unique_by') or 'hostname').strip().lower()
+        if v not in ('hostname', 'ip'):
+            v = 'hostname'
+        _set_setting('discovery_unique_by', v)
 
     # 自动发现：执行频率（只允许固定几种值）
     if 'discovery_frequency' in data:

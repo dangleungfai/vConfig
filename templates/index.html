@@ -271,7 +271,7 @@
         <h2>备份日志</h2>
     </header>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="log-hostname" placeholder="搜索 主机名">
+        <input type="text" id="log-search" placeholder="主机名或管理 IP">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs">搜索</button>
     </div>
     <div class="table-wrap table-resizable">
@@ -640,6 +640,16 @@
                             <span>段拼成主机名</span>
                         </div>
                         <span class="form-hint">主机名为域名格式时，按分隔符分段后取「前 N 段」作为主机名：无后缀如 ABC1.PE1. 取前 2 段得 ABC1.PE1；有后缀如 ABC1.PE1.example.com 取前 2 段得 ABC1.PE1。留空分隔符则不处理。</span>
+                    </div>
+                    <div class="form-row">
+                        <label>添加设备唯一性</label>
+                        <div class="form-row-inline">
+                            <select id="setting-discovery-unique-by">
+                                <option value="hostname">按主机名</option>
+                                <option value="ip">按管理 IP</option>
+                            </select>
+                        </div>
+                        <span class="form-hint">自动发现时，若设备列表中已存在相同主机名或相同 IP（依此处选择），则跳过不重复添加。默认按主机名。</span>
                     </div>
                     <div class="form-row">
                         <label>快速扫描（临时）</label>
