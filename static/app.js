@@ -902,7 +902,7 @@ document.getElementById('btn-config-changes-copy')?.addEventListener('click', ()
     if (!allText.trim()) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(allText).then(() => {
-            if (typeof toast === 'function') toast('已复制右侧所有命令', 'success');
+            if (typeof toast === 'function') toast(window.t ? window.t('toast_copied_all') : '已复制右侧所有命令', 'success');
         }).catch(() => {});
     }
 });
@@ -915,7 +915,7 @@ document.getElementById('btn-config-changes-copy-removed')?.addEventListener('cl
     if (!removedText.trim()) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(removedText).then(() => {
-            if (typeof toast === 'function') toast('已复制删除的命令', 'success');
+            if (typeof toast === 'function') toast(window.t ? window.t('toast_copied_removed') : '已复制删除的命令', 'success');
         }).catch(() => {});
     }
 });
@@ -1013,10 +1013,10 @@ document.getElementById('dashboard-btn-backup')?.addEventListener('click', async
     const res = await fetch(`${API}/backup/run`, { method: 'POST' });
     const data = await res.json();
     if (res.ok) {
-        toast(data.message || '已启动全量备份', 'success');
+        toast(data.message || (window.t ? window.t('toast_backup_started') : '已启动全量备份'), 'success');
         showTab('backup');
     } else {
-        toast(data.error || '启动失败', 'error');
+        toast(data.error || (window.t ? window.t('toast_start_failed') : '启动失败'), 'error');
     }
     btn.disabled = false;
     btn.textContent = '立即全量备份';
@@ -1215,7 +1215,7 @@ async function initDiscoveryModule() {
     document.getElementById('btn-discovery-quick-scan')?.addEventListener('click', async () => {
         const raw = (document.getElementById('discovery-quick-ip-range').value || '').trim();
         if (!raw) {
-            toast('请输入 IP 段或 IP 列表', 'warn');
+            toast(window.t ? window.t('toast_enter_ip_range') : '请输入 IP 段或 IP 列表', 'warn');
             return;
         }
         // 复用现有 /api/devices/discover 进行 TCP 22/23 探测
@@ -1241,7 +1241,7 @@ async function initDiscoveryModule() {
             });
             const data = await res.json();
             if (!res.ok) {
-                toast(data.error || '扫描失败', 'error');
+                toast(data.error || (window.t ? window.t('toast_scan_failed') : '扫描失败'), 'error');
                 return;
             }
             const results = data.results || [];
@@ -1253,7 +1253,7 @@ async function initDiscoveryModule() {
             outPre.textContent = linesOut.join('\n');
             outWrap.style.display = '';
         } catch (e) {
-            toast('扫描失败，请稍后重试', 'error');
+            toast(window.t ? window.t('toast_scan_failed_retry') : '扫描失败，请稍后重试', 'error');
         } finally {
             btn.disabled = false;
             btn.textContent = '扫描';
@@ -1364,16 +1364,16 @@ async function loadDiscoveryRules() {
                     const res = await fetch(`${API}/discovery/rules/${id}/run`, { method: 'POST' });
                     const data = await res.json();
                     if (!res.ok || !data.ok) {
-                        toast(data.error || '执行规则失败', 'error');
+                        toast(data.error || (window.t ? window.t('toast_rule_exec_failed') : '执行规则失败'), 'error');
                         btn.disabled = false;
                         btn.textContent = '运行';
                     } else {
-                        toast('已提交自动发现任务，正在后台运行…', 'success');
+                        toast(window.t ? window.t('toast_discovery_submitted') : '已提交自动发现任务，正在后台运行…', 'success');
                         // 后续按钮状态与日志由轮询接口刷新
                         refreshDiscoveryStatuses();
                     }
                 } catch (e) {
-                    toast('执行规则失败，请稍后重试', 'error');
+                    toast(window.t ? window.t('toast_rule_exec_failed_retry') : '执行规则失败，请稍后重试', 'error');
                 }
             });
         });
@@ -1387,12 +1387,12 @@ async function loadDiscoveryRules() {
                     const res = await fetch(`${API}/discovery/rules/${id}/logs`);
                     const data = await res.json();
                     if (!res.ok || !data.logs) {
-                        toast(data.error || '获取日志失败', 'error');
+                        toast(data.error || (window.t ? window.t('toast_get_log_failed') : '获取日志失败'), 'error');
                         return;
                     }
                     openDiscoveryLogModal(data);
                 } catch (e) {
-                    toast('获取日志失败，请稍后重试', 'error');
+                    toast(window.t ? window.t('toast_get_log_failed_retry') : '获取日志失败，请稍后重试', 'error');
                 }
             });
         });
@@ -1415,14 +1415,14 @@ async function loadDiscoveryRules() {
                     });
                     const data = await res.json();
                     if (!res.ok || !data.ok) {
-                        toast(data.error || '更新规则状态失败', 'error');
+                        toast(data.error || (window.t ? window.t('toast_rule_status_failed') : '更新规则状态失败'), 'error');
                     } else {
-                        toast(newEnabled ? '规则已启用' : '规则已禁用', 'success');
+                        toast(newEnabled ? (window.t ? window.t('toast_rule_enabled') : '规则已启用') : (window.t ? window.t('toast_rule_disabled') : '规则已禁用'), 'success');
                         // 直接更新按钮文本，避免整表重载
                         btn.textContent = newEnabled ? '禁用' : '启用';
                     }
                 } catch (e) {
-                    toast('更新规则状态失败，请稍后重试', 'error');
+                    toast(window.t ? window.t('toast_rule_status_failed_retry') : '更新规则状态失败，请稍后重试', 'error');
                 } finally {
                     btn.disabled = false;
                 }
@@ -1441,13 +1441,13 @@ async function loadDiscoveryRules() {
                     const res = await fetch(`${API}/discovery/rules/${id}`, { method: 'DELETE' });
                     const data = await res.json();
                     if (!res.ok || !data.ok) {
-                        toast(data.error || '删除规则失败', 'error');
+                        toast(data.error || (window.t ? window.t('toast_rule_delete_failed') : '删除规则失败'), 'error');
                     } else {
-                        toast('规则已删除', 'success');
+                        toast(window.t ? window.t('toast_rule_deleted') : '规则已删除', 'success');
                         await loadDiscoveryRules();
                     }
                 } catch (e) {
-                    toast('删除规则失败，请稍后重试', 'error');
+                    toast(window.t ? window.t('toast_rule_delete_failed_retry') : '删除规则失败，请稍后重试', 'error');
                 }
             });
         });
@@ -1703,12 +1703,12 @@ document.getElementById('btn-discovery-rule-save')?.addEventListener('click', as
     const name = nameInput?.value.trim() || '';
     const ipRange = ipInput?.value.trim() || '';
     if (!name) {
-        toast('请填写规则名称', 'warn');
+        toast(window.t ? window.t('toast_fill_rule_name') : '请填写规则名称', 'warn');
         nameInput?.focus();
         return;
     }
     if (!ipRange) {
-        toast('请填写 IP 范围', 'warn');
+        toast(window.t ? window.t('toast_fill_ip_range') : '请填写 IP 范围', 'warn');
         ipInput?.focus();
         return;
     }
@@ -1734,14 +1734,14 @@ document.getElementById('btn-discovery-rule-save')?.addEventListener('click', as
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-            toast(data.error || (isEdit ? '更新规则失败' : '创建规则失败'), 'error');
+            toast(data.error || (window.t ? window.t(isEdit ? 'toast_rule_update_failed' : 'toast_rule_create_failed') : (isEdit ? '更新规则失败' : '创建规则失败')), 'error');
             return;
         }
-        toast(isEdit ? '规则已更新' : '已创建自动发现规则', 'success');
+        toast(window.t ? window.t(isEdit ? 'toast_rule_updated' : 'toast_rule_created') : (isEdit ? '规则已更新' : '已创建自动发现规则'), 'success');
         closeDiscoveryRuleModal();
         await loadDiscoveryRules();
     } catch (e) {
-        toast(isEdit ? '更新规则失败，请稍后重试' : '创建规则失败，请稍后重试', 'error');
+        toast(window.t ? window.t(isEdit ? 'toast_rule_update_failed_retry' : 'toast_rule_create_failed_retry') : (isEdit ? '更新规则失败，请稍后重试' : '创建规则失败，请稍后重试'), 'error');
     }
 });
 
@@ -1899,7 +1899,7 @@ document.querySelectorAll('.device-sort-btn').forEach(btn => {
 
 document.getElementById('btn-export-csv')?.addEventListener('click', () => {
     window.open(`${API}/devices/export`, '_blank');
-    toast('已发起导出', 'success');
+    toast(window.t ? window.t('toast_export_started') : '已发起导出', 'success');
 });
 document.getElementById('device-list')?.addEventListener('click', function(e) {
     const btn = e.target.closest('button[data-action][data-id]');
@@ -1932,13 +1932,13 @@ document.getElementById('btn-delete-one-confirm')?.addEventListener('click', asy
     document.getElementById('modal-delete-one').classList.remove('show');
     const res = await fetch(`${API}/devices/${id}`, { method: 'DELETE' });
     if (res.ok) {
-        toast('已删除', 'success');
+        toast(window.t ? window.t('toast_deleted') : '已删除', 'success');
         loadDevices();
         loadDashboard();
         loadConfigs();
     } else {
         const d = await res.json();
-        toast(d.error || '删除失败', 'error');
+        toast(d.error || (window.t ? window.t('toast_delete_failed') : '删除失败'), 'error');
     }
 });
 
@@ -1985,12 +1985,12 @@ document.getElementById('btn-batch-delete-confirm')?.addEventListener('click', a
         const res = await fetch(`${API}/devices/delete-all`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.ok) {
-            toast(`已删除 ${data.deleted} 台设备`, 'success');
+            toast((window.t ? window.t('toast_deleted_devices') : '已删除 {n} 台设备').replace('{n}', data.deleted), 'success');
             loadDevices();
             loadDashboard();
             loadConfigs();
         } else {
-            toast(data.error || '删除失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_delete_failed') : '删除失败'), 'error');
         }
     } else {
         if (!ids.length) return;
@@ -2001,12 +2001,12 @@ document.getElementById('btn-batch-delete-confirm')?.addEventListener('click', a
         });
         const data = await res.json();
         if (res.ok) {
-            toast(`已删除 ${data.deleted} 台设备`, 'success');
+            toast((window.t ? window.t('toast_deleted_devices') : '已删除 {n} 台设备').replace('{n}', data.deleted), 'success');
             loadDevices();
             loadDashboard();
             loadConfigs();
         } else {
-            toast(data.error || '删除失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_delete_failed') : '删除失败'), 'error');
         }
     }
 });
@@ -2014,7 +2014,7 @@ document.getElementById('btn-batch-delete-confirm')?.addEventListener('click', a
 async function batchDelete() {
     const ids = Array.from(document.querySelectorAll('.device-cb:checked')).map(cb => parseInt(cb.value, 10));
     if (ids.length === 0) {
-        toast('请先勾选要删除的设备', 'warn');
+        toast(window.t ? window.t('toast_select_devices_delete') : '请先勾选要删除的设备', 'warn');
         return;
     }
     const currentPageCount = document.querySelectorAll('.device-cb').length;
@@ -2027,7 +2027,7 @@ document.getElementById('btn-batch-delete')?.addEventListener('click', batchDele
 document.getElementById('btn-batch-edit')?.addEventListener('click', async () => {
     const ids = Array.from(document.querySelectorAll('.device-cb:checked')).map(cb => parseInt(cb.value, 10)).filter(n => !isNaN(n));
     if (!ids.length) {
-        toast('请先勾选要编辑的设备', 'warn');
+        toast(window.t ? window.t('toast_select_devices_edit') : '请先勾选要编辑的设备', 'warn');
         return;
     }
     document.getElementById('batch-edit-device-type').value = '';
@@ -2050,7 +2050,7 @@ document.getElementById('btn-batch-edit-cancel')?.addEventListener('click', () =
 document.getElementById('btn-batch-edit-submit')?.addEventListener('click', async () => {
     const ids = Array.from(document.querySelectorAll('.device-cb:checked')).map(cb => parseInt(cb.value, 10)).filter(n => !isNaN(n));
     if (!ids.length) {
-        toast('请先勾选要编辑的设备', 'warn');
+        toast(window.t ? window.t('toast_select_devices_edit') : '请先勾选要编辑的设备', 'warn');
         return;
     }
     const payload = { ids };
@@ -2071,7 +2071,7 @@ document.getElementById('btn-batch-edit-submit')?.addEventListener('click', asyn
         if (!isNaN(port) && port >= 1 && port <= 65535) payload.telnet_port = port;
     }
     if (Object.keys(payload).length <= 1) {
-        toast('请至少填写一项要修改的内容', 'warn');
+        toast(window.t ? window.t('toast_fill_edit_fields') : '请至少填写一项要修改的内容', 'warn');
         return;
     }
     try {
@@ -2082,14 +2082,14 @@ document.getElementById('btn-batch-edit-submit')?.addEventListener('click', asyn
         });
         const data = await res.json();
         if (res.ok && data.ok) {
-            toast(`已更新 ${data.updated ?? ids.length} 台设备`, 'success');
+            toast((window.t ? window.t('toast_updated_devices') : '已更新 {n} 台设备').replace('{n}', data.updated ?? ids.length), 'success');
             document.getElementById('modal-batch-edit').classList.remove('show');
             loadDevices();
         } else {
-            toast(data.error || '批量更新失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_batch_update_failed') : '批量更新失败'), 'error');
         }
     } catch (e) {
-        toast('批量更新失败，请稍后重试', 'error');
+        toast(window.t ? window.t('toast_batch_update_failed_retry') : '批量更新失败，请稍后重试', 'error');
     }
 });
 
@@ -2464,7 +2464,7 @@ document.getElementById('btn-terminal-close')?.addEventListener('click', closeTe
         const sel = typeof _terminalXterm.getSelection === 'function' ? _terminalXterm.getSelection() : '';
         if (sel && navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(sel).then(() => {
-                if (typeof toast === 'function') toast('已复制到剪贴板', 'success');
+                if (typeof toast === 'function') toast(window.t ? window.t('toast_copied_clipboard') : '已复制到剪贴板', 'success');
             }).catch(() => {});
         }
     });
@@ -2491,14 +2491,14 @@ async function backupOne(deviceId, btnEl) {
         const res = await fetch(`${API}/backup/run/device/${deviceId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-            toast(data.message || '已加入备份队列', 'success');
+            toast(data.message || (window.t ? window.t('toast_added_to_queue') : '已加入备份队列'), 'success');
             // 单台备份成功启动后，自动跳转到「执行备份」页签查看任务进度
             try { showTab('backup'); } catch (_) {}
             loadLogs();
             loadBackupStatus();
             pollBackupStatus();
         } else {
-            toast(data.error || '备份失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_backup_failed') : '备份失败'), 'error');
         }
     } finally {
         if (btnEl) { btnEl.disabled = false; btnEl.textContent = '备份'; }
@@ -2582,7 +2582,7 @@ async function openDeviceModal(id) {
             const r = await fetch(`${API}/devices/${id}?_t=${Date.now()}`);
             const d = await r.json();
             if (!r.ok) {
-                toast(d.error || '加载设备失败', 'error');
+                toast(d.error || (window.t ? window.t('toast_load_devices_failed') : '加载设备失败'), 'error');
                 return;
             }
             document.getElementById('device-ip').value = d.ip || '';
@@ -2596,7 +2596,7 @@ async function openDeviceModal(id) {
             document.getElementById('device-username').value = d.username || '';
             document.getElementById('device-password').value = '';
         } catch (e) {
-            toast('加载设备失败，请稍后重试', 'error');
+            toast(window.t ? window.t('toast_load_devices_failed_retry') : '加载设备失败，请稍后重试', 'error');
             return;
         }
     }
@@ -2653,7 +2653,7 @@ document.getElementById('btn-maintenance-save')?.addEventListener('click', async
             document.getElementById('modal-maintenance').classList.remove('show');
             _maintenanceDeviceId = null;
             loadDevices(true);
-            if (typeof toast === 'function') toast('维护已保存', 'success');
+            if (typeof toast === 'function') toast(window.t ? window.t('toast_maintenance_saved') : '维护已保存', 'success');
         } else {
             alert(data.error || '保存失败');
         }
@@ -2714,7 +2714,7 @@ document.getElementById('btn-modal-save').addEventListener('click', async () => 
             document.getElementById('modal-device').classList.remove('show');
             loadDevices(true);
             loadConfigs();
-            if (typeof toast === 'function') toast('保存成功', 'success');
+            if (typeof toast === 'function') toast(window.t ? window.t('toast_save_success') : '保存成功', 'success');
         } else {
             let msg = '保存失败';
             try {
@@ -2764,15 +2764,15 @@ async function loadDeviceGroupModalList() {
                     const r = await fetch(`${API}/device-groups/${enc}`, { method: 'DELETE' });
                     const d = await r.json();
                     if (r.ok && d.ok) {
-                        toast('已移除该分组', 'success');
+                        toast(window.t ? window.t('toast_group_removed') : '已移除该分组', 'success');
                         loadDeviceGroupModalList();
                         refreshDeviceGroupDatalist();
                         loadDevices();
                     } else {
-                        toast(d.error || '操作失败', 'error');
+                        toast(d.error || (window.t ? window.t('toast_operation_failed') : '操作失败'), 'error');
                     }
                 } catch (e) {
-                    toast('操作失败', 'error');
+                    toast(window.t ? window.t('toast_operation_failed') : '操作失败', 'error');
                 }
             });
         });
@@ -2793,7 +2793,7 @@ document.getElementById('btn-device-group-cancel')?.addEventListener('click', ()
 document.getElementById('btn-device-group-create')?.addEventListener('click', async () => {
     const name = (document.getElementById('device-group-name').value || '').trim();
     if (!name) {
-        toast('请输入分组名称', 'warn');
+        toast(window.t ? window.t('toast_enter_group_name') : '请输入分组名称', 'warn');
         return;
     }
     try {
@@ -2804,16 +2804,16 @@ document.getElementById('btn-device-group-create')?.addEventListener('click', as
         });
         const data = await res.json();
         if (res.ok && data.ok) {
-            toast('分组已创建', 'success');
+            toast(window.t ? window.t('toast_group_created') : '分组已创建', 'success');
             document.getElementById('device-group-name').value = '';
             loadDeviceGroupModalList();
             refreshDeviceGroupDatalist();
             loadDevices();
         } else {
-            toast(data.error || '创建失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_create_failed') : '创建失败'), 'error');
         }
     } catch (e) {
-        toast('创建失败，请稍后重试', 'error');
+        toast(window.t ? window.t('toast_create_failed_retry') : '创建失败，请稍后重试', 'error');
     }
 });
 
@@ -2842,7 +2842,7 @@ document.getElementById('btn-import-submit').addEventListener('click', async () 
     });
     const r = await res.json();
     document.getElementById('modal-import').classList.remove('show');
-    toast(`导入 ${r.imported} 台设备`, 'success');
+    toast((window.t ? window.t('toast_imported_devices') : '导入 {n} 台设备').replace('{n}', r.imported), 'success');
     loadDevices();
     loadDashboard();
     loadConfigs();
@@ -3382,7 +3382,7 @@ function loadConfigDevicePanelData() {
                         a.download = (this.getAttribute('data-name') || 'config.txt').endsWith('.txt') ? this.getAttribute('data-name') : this.getAttribute('data-name') + '.txt';
                         a.click();
                         URL.revokeObjectURL(a.href);
-                    }).catch(() => toast('下载失败', 'error'));
+                    }).catch(() => toast(window.t ? window.t('toast_download_failed') : '下载失败', 'error'));
                 });
             });
         }
@@ -3411,7 +3411,7 @@ function initConfigDevicePanelHandlers() {
     const diffHint = document.getElementById('diff-hint');
     document.getElementById('btn-diff')?.addEventListener('click', function() {
         const fa = selectA?.value; const fb = selectB?.value;
-        if (!fa || !fb || fa === fb) { toast('请选择两个不同的版本', 'warn'); return; }
+        if (!fa || !fb || fa === fb) { toast(window.t ? window.t('toast_select_two_versions') : '请选择两个不同的版本', 'warn'); return; }
         const fileContentBase = `${API}/configs/${encodeURIComponent(_configDevicePrefix)}/${encodeURIComponent(_configDeviceHostname)}`;
         diffHint?.classList.add('hidden');
         diffLoading?.classList.remove('hidden');
@@ -3558,13 +3558,13 @@ document.getElementById('btn-delete-backups-confirm')?.addEventListener('click',
         const res = await fetch(url, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.ok) {
-            toast(`已删除设备「${hostnameRaw || ''}」的 ${data.deleted || 0} 个备份文件`, 'success');
+            toast((window.t ? window.t('toast_deleted_backups') : '已删除设备「{hostname}」的 {n} 个备份文件').replace('{hostname}', hostnameRaw || '').replace('{n}', data.deleted || 0), 'success');
             loadConfigs();
         } else {
-            toast(data.error || '删除备份失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_delete_backups_failed') : '删除备份失败'), 'error');
         }
     } catch (_) {
-        toast('删除备份失败，请稍后重试', 'error');
+        toast(window.t ? window.t('toast_delete_backups_failed_retry') : '删除备份失败，请稍后重试', 'error');
     }
 });
 
@@ -3811,13 +3811,13 @@ document.getElementById('user-list')?.addEventListener('click', e => {
                 const res = await fetch(`${API}/users/${user.id}`, { method: 'DELETE' });
                 const data = await res.json();
                 if (res.ok && data.ok) {
-                    toast('用户已删除', 'success');
+                    toast(window.t ? window.t('toast_user_deleted') : '用户已删除', 'success');
                     loadUsers();
                 } else {
-                    toast(data.error || '删除失败', 'error');
+                    toast(data.error || (window.t ? window.t('toast_delete_failed') : '删除失败'), 'error');
                 }
             } catch (e) {
-                toast('删除失败，请稍后重试', 'error');
+                toast(window.t ? window.t('toast_delete_failed_retry') : '删除失败，请稍后重试', 'error');
             }
         })();
     }
@@ -3886,7 +3886,7 @@ document.getElementById('btn-user-password-generate')?.addEventListener('click',
     if (!pwdEl) return;
     pwdEl.value = generateRandomPassword();
     pwdEl.type = 'text';
-    toast('已生成随机密码，请复制保存后勿泄露', 'success');
+    toast(window.t ? window.t('toast_password_generated') : '已生成随机密码，请复制保存后勿泄露', 'success');
 });
 
 document.getElementById('btn-user-save')?.addEventListener('click', async () => {
@@ -3910,12 +3910,12 @@ document.getElementById('btn-user-save')?.addEventListener('click', async () => 
     if (_userEditMode === 'create' || _userEditMode === 'clone') {
         const username = (nameInput && nameInput.value) ? nameInput.value.trim() : '';
         if (!username) {
-            toast('请输入用户名', 'error');
+            toast(window.t ? window.t('toast_enter_username') : '请输入用户名', 'error');
             return;
         }
         const pwd = (pwdEl && pwdEl.value) ? pwdEl.value : '';
         if (!pwd) {
-            toast('请为本地账号设置登录密码', 'error');
+            toast(window.t ? window.t('toast_set_password') : '请为本地账号设置登录密码', 'error');
             return;
         }
         const body = Object.assign({}, payload, { username, password: pwd });
@@ -3927,16 +3927,16 @@ document.getElementById('btn-user-save')?.addEventListener('click', async () => 
             });
             const data = await res.json();
             if (res.ok) {
-                toast('本地账号已保存', 'success');
+                toast(window.t ? window.t('toast_local_user_saved') : '本地账号已保存', 'success');
                 document.getElementById('modal-user')?.classList.remove('show');
                 _editingUserId = null;
                 _userEditMode = 'edit';
                 loadUsers();
             } else {
-                toast(data.error || '保存失败', 'error');
+                toast(data.error || (window.t ? window.t('toast_save_failed') : '保存失败'), 'error');
             }
         } catch (e) {
-            toast('保存失败，请稍后重试', 'error');
+            toast(window.t ? window.t('toast_save_failed_retry') : '保存失败，请稍后重试', 'error');
         }
         return;
     }
@@ -3954,15 +3954,15 @@ document.getElementById('btn-user-save')?.addEventListener('click', async () => 
         });
         const data = await res.json();
         if (res.ok) {
-            toast('用户信息已更新', 'success');
+            toast(window.t ? window.t('toast_user_updated') : '用户信息已更新', 'success');
             document.getElementById('modal-user')?.classList.remove('show');
             _editingUserId = null;
             loadUsers();
         } else {
-            toast(data.error || '更新失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_update_failed') : '更新失败'), 'error');
         }
     } catch (e) {
-        toast('更新失败，请稍后重试', 'error');
+        toast(window.t ? window.t('toast_update_failed_retry') : '更新失败，请稍后重试', 'error');
     }
 });
 async function loadSettings() {
@@ -4198,13 +4198,13 @@ document.getElementById('btn-reset-settings-defaults')?.addEventListener('click'
         const res = await fetch(`${API}/settings/reset-defaults`, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
-            toast(data.error || '恢复默认设置失败，请稍后重试。', 'error');
+            toast(data.error || (window.t ? window.t('toast_reset_defaults_failed') : '恢复默认设置失败，请稍后重试。'), 'error');
             return;
         }
-        toast('已恢复为系统默认设置', 'success');
+        toast(window.t ? window.t('toast_reset_defaults_ok') : '已恢复为系统默认设置', 'success');
         loadSettings();
     } catch (e) {
-        toast('恢复默认设置失败，请检查网络后重试。', 'error');
+        toast(window.t ? window.t('toast_reset_defaults_failed_retry') : '恢复默认设置失败，请检查网络后重试。', 'error');
     }
 });
 
@@ -4214,13 +4214,13 @@ document.getElementById('btn-restart-service')?.addEventListener('click', async 
         const res = await fetch(`${API}/settings/restart`, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
-            toast(data.error || '重启失败，请检查服务运行方式。', 'error');
+            toast(data.error || (window.t ? window.t('toast_restart_failed') : '重启失败，请检查服务运行方式。'), 'error');
             return;
         }
-        toast('重启已触发，请稍候刷新页面。', 'success');
+        toast(window.t ? window.t('toast_restart_triggered') : '重启已触发，请稍候刷新页面。', 'success');
         setTimeout(() => { window.location.reload(); }, 3000);
     } catch (e) {
-        toast('重启请求失败，请稍后重试。', 'error');
+        toast(window.t ? window.t('toast_restart_failed_retry') : '重启请求失败，请稍后重试。', 'error');
     }
 });
 
@@ -4236,13 +4236,13 @@ document.getElementById('btn-db-backup-confirm')?.addEventListener('click', () =
     const modal = document.getElementById('modal-db-backup');
     if (modal) modal.classList.remove('show');
     window.location.href = `${API}/settings/db/backup`;
-    toast('正在下载数据库备份…', 'success');
+    toast(window.t ? window.t('toast_db_downloading') : '正在下载数据库备份…', 'success');
 });
 
 document.getElementById('btn-db-restore')?.addEventListener('click', async () => {
     const input = document.getElementById('db-restore-file');
     if (!input?.files?.length) {
-        toast('请先选择要恢复的数据库备份文件。', 'warn');
+        toast(window.t ? window.t('toast_select_db_file') : '请先选择要恢复的数据库备份文件。', 'warn');
         return;
     }
     if (!confirm('确定要恢复数据库吗？当前数据库将先备份，恢复后会触发服务重启。')) return;
@@ -4252,14 +4252,14 @@ document.getElementById('btn-db-restore')?.addEventListener('click', async () =>
         const res = await fetch(`${API}/settings/db/restore`, { method: 'POST', body: formData });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
-            toast(data.error || '恢复失败，请稍后重试。', 'error');
+            toast(data.error || (window.t ? window.t('toast_restore_failed') : '恢复失败，请稍后重试。'), 'error');
             return;
         }
-        toast('数据库已恢复，服务将重启，请稍候刷新页面。', 'success');
+        toast(window.t ? window.t('toast_db_restored') : '数据库已恢复，服务将重启，请稍候刷新页面。', 'success');
         input.value = '';
         setTimeout(() => { window.location.reload(); }, 3000);
     } catch (e) {
-        toast('恢复请求失败，请稍后重试。', 'error');
+        toast(window.t ? window.t('toast_restore_failed_retry') : '恢复请求失败，请稍后重试。', 'error');
     }
 });
 
@@ -4332,7 +4332,7 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
 document.getElementById('btn-logo-upload')?.addEventListener('click', async () => {
     const input = document.getElementById('setting-logo-file');
     if (!input || !input.files || !input.files.length) {
-        toast('请先选择要上传的 Logo 图片文件。', 'warn');
+        toast(window.t ? window.t('toast_select_logo') : '请先选择要上传的 Logo 图片文件。', 'warn');
         return;
     }
     const file = input.files[0];
@@ -4345,14 +4345,14 @@ document.getElementById('btn-logo-upload')?.addEventListener('click', async () =
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-            toast(data.error || 'Logo 上传失败，请稍后重试。', 'error');
+            toast(data.error || (window.t ? window.t('toast_logo_upload_failed') : 'Logo 上传失败，请稍后重试。'), 'error');
             return;
         }
-        toast('Logo 已更新', 'success');
+        toast(window.t ? window.t('toast_logo_updated') : 'Logo 已更新', 'success');
         // 重新加载设置以刷新预览
         loadSettings();
     } catch (e) {
-        toast('Logo 上传失败，请检查网络后重试。', 'error');
+        toast(window.t ? window.t('toast_logo_upload_failed_retry') : 'Logo 上传失败，请检查网络后重试。', 'error');
     } finally {
         if (input) input.value = '';
     }
@@ -4366,13 +4366,13 @@ document.getElementById('btn-logo-reset')?.addEventListener('click', async () =>
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-            toast(data.error || '重置 Logo 失败，请稍后重试。', 'error');
+            toast(data.error || (window.t ? window.t('toast_logo_reset_failed') : '重置 Logo 失败，请稍后重试。'), 'error');
             return;
         }
-        toast('已重置为默认图标', 'success');
+        toast(window.t ? window.t('toast_logo_reset_ok') : '已重置为默认图标', 'success');
         loadSettings();
     } catch (e) {
-        toast('重置 Logo 失败，请检查网络后重试。', 'error');
+        toast(window.t ? window.t('toast_logo_reset_failed_retry') : '重置 Logo 失败，请检查网络后重试。', 'error');
     }
 });
 
@@ -4380,7 +4380,7 @@ document.getElementById('btn-upload-ssl-cert')?.addEventListener('click', async 
     const certInput = document.getElementById('ssl-cert-file');
     const keyInput = document.getElementById('ssl-key-file');
     if (!certInput?.files?.length || !keyInput?.files?.length) {
-        toast('请先选择证书文件和私钥文件', 'error');
+        toast(window.t ? window.t('toast_select_cert_key') : '请先选择证书文件和私钥文件', 'error');
         return;
     }
     const formData = new FormData();
@@ -4395,14 +4395,14 @@ document.getElementById('btn-upload-ssl-cert')?.addEventListener('click', async 
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-            toast(data.message || '证书已上传，请重启服务后生效。', 'success');
+            toast(data.message || (window.t ? window.t('toast_cert_uploaded') : '证书已上传，请重启服务后生效。'), 'success');
             if (certInput) certInput.value = '';
             if (keyInput) keyInput.value = '';
         } else {
-            toast(data.error || '上传证书失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_cert_upload_failed') : '上传证书失败'), 'error');
         }
     } catch (e) {
-        toast('请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+        toast((window.t ? window.t('toast_request_failed') : '请求失败：') + (e && e.message ? e.message : (window.t ? window.t('toast_network_error') : '网络错误')), 'error');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -4416,12 +4416,12 @@ document.getElementById('btn-update-ssl-cert')?.addEventListener('click', async 
         const res = await fetch(`${API}/settings/update-ssl-cert`, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-            toast(data.message || 'SSL 证书已重新生成，请重启服务后生效。', 'success');
+            toast(data.message || (window.t ? window.t('toast_cert_regenerated') : 'SSL 证书已重新生成，请重启服务后生效。'), 'success');
         } else {
-            toast(data.error || '更新证书失败', 'error');
+            toast(data.error || (window.t ? window.t('toast_cert_update_failed') : '更新证书失败'), 'error');
         }
     } catch (e) {
-        toast('请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+        toast((window.t ? window.t('toast_request_failed') : '请求失败：') + (e && e.message ? e.message : (window.t ? window.t('toast_network_error') : '网络错误')), 'error');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -4618,7 +4618,7 @@ document.getElementById('btn-test-webhook')?.addEventListener('click', async () 
     if (!inputEl || !btn) return;
     const url = (inputEl.value || '').trim();
     if (!url) {
-        toast('请先填写 Webhook URL', 'warn');
+        toast(window.t ? window.t('toast_fill_webhook') : '请先填写 Webhook URL', 'warn');
         return;
     }
     btn.disabled = true;
@@ -4630,12 +4630,12 @@ document.getElementById('btn-test-webhook')?.addEventListener('click', async () 
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-            toast(data.message || '已发送测试消息', 'success');
+            toast(data.message || (window.t ? window.t('toast_test_sent') : '已发送测试消息'), 'success');
         } else {
-            toast(data.error || '测试失败，请检查 URL 是否可达', 'error');
+            toast(data.error || (window.t ? window.t('toast_test_failed') : '测试失败，请检查 URL 是否可达'), 'error');
         }
     } catch (e) {
-        toast('请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+        toast((window.t ? window.t('toast_request_failed') : '请求失败：') + (e && e.message ? e.message : (window.t ? window.t('toast_network_error') : '网络错误')), 'error');
     } finally {
         btn.disabled = false;
     }

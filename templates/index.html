@@ -18,69 +18,69 @@
     <div class="stats-cards" id="dashboard-stats">
         <div class="stat-card">
             <div class="stat-value" id="stat-total">--</div>
-            <div class="stat-label">设备总数</div>
+            <div class="stat-label" data-i18n="stat_total_devices">设备总数</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="stat-enabled">--</div>
-            <div class="stat-label">已启用</div>
+            <div class="stat-label" data-i18n="stat_enabled">已启用</div>
         </div>
         <div class="stat-card stat-success">
             <div class="stat-value" id="stat-today-ok">--</div>
-            <div class="stat-label">今日成功</div>
+            <div class="stat-label" data-i18n="stat_today_ok">今日成功</div>
         </div>
         <div class="stat-card stat-danger">
             <div class="stat-value" id="stat-today-fail">--</div>
-            <div class="stat-label">今日失败</div>
+            <div class="stat-label" data-i18n="stat_today_fail">今日失败</div>
         </div>
         <div class="stat-card stat-warn">
             <div class="stat-value" id="stat-no-backup">--</div>
-            <div class="stat-label">24h 未备份</div>
+            <div class="stat-label" data-i18n="stat_no_backup_24h">24h 未备份</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="stat-sla-24h">--</div>
-            <div class="stat-label">24h 达标率</div>
+            <div class="stat-label" data-i18n="stat_sla_24h">24h 达标率</div>
         </div>
     </div>
     <div class="dashboard-meta" id="dashboard-last-backup"></div>
     <div class="dashboard-settings" id="dashboard-settings-summary"></div>
     <div class="dashboard-running" id="dashboard-running" style="display:none">
-        <span class="badge badge-warn">备份任务执行中</span>
+        <span class="badge badge-warn" data-i18n="dashboard_running">备份任务执行中</span>
     </div>
     <p class="dashboard-hint" id="dashboard-hint"></p>
     <div class="dashboard-grid" id="dashboard-grid">
         <section class="dashboard-card" data-card-id="trend" draggable="true">
-            <h3 class="dashboard-card-title">备份趋势（近 7 天）</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_trend">备份趋势（近 7 天）</h3>
             <div class="chart-wrap" id="dashboard-trend-chart"></div>
         </section>
         <section class="dashboard-card" data-card-id="type-dist" draggable="true">
-            <h3 class="dashboard-card-title">设备类型</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_type_dist">设备类型</h3>
             <div class="type-distribution" id="dashboard-type-dist"></div>
         </section>
         <section class="dashboard-card" data-card-id="sla-type" draggable="true">
-            <h3 class="dashboard-card-title">按类型 24h 成功率</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_sla_type">按类型 24h 成功率</h3>
             <div class="dashboard-sla-table" id="dashboard-success-by-type"></div>
         </section>
         <section class="dashboard-card" data-card-id="sla-group" draggable="true">
-            <h3 class="dashboard-card-title">按分组 24h 成功率</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_sla_group">按分组 24h 成功率</h3>
             <div class="dashboard-sla-table" id="dashboard-success-by-group"></div>
         </section>
         <section class="dashboard-card" data-card-id="risk" draggable="true">
-            <h3 class="dashboard-card-title">备份失败</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_risk">备份失败</h3>
             <div class="recent-activity" id="dashboard-recent-fail"></div>
-            <p class="hint" id="dashboard-recent-fail-empty" style="display:none">最近 7 天无备份失败记录</p>
+            <p class="hint" id="dashboard-recent-fail-empty" style="display:none" data-i18n="dashboard_recent_fail_empty">最近 7 天无备份失败记录</p>
         </section>
         <section class="dashboard-card" data-card-id="config-changes" draggable="true">
-            <h3 class="dashboard-card-title">配置变动</h3>
-            <div id="dashboard-config-changes-loading" class="loading-state">加载中...</div>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_config_changes">配置变动</h3>
+            <div id="dashboard-config-changes-loading" class="loading-state" data-i18n="common_loading">加载中...</div>
             <div class="recent-activity" id="dashboard-config-changes-list"></div>
-            <p class="hint" id="dashboard-config-changes-empty" style="display:none">暂无配置变动数据（需至少有一次备份完成后有变动记录）。</p>
+            <p class="hint" id="dashboard-config-changes-empty" style="display:none" data-i18n="dashboard_config_changes_empty">暂无配置变动数据（需至少有一次备份完成后有变动记录）。</p>
         </section>
         <section class="dashboard-card" data-card-id="logins" draggable="true">
-            <h3 class="dashboard-card-title">最近登录</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_logins">最近登录</h3>
             <div class="recent-logins" id="dashboard-login-logs"></div>
         </section>
         <section class="dashboard-card" data-card-id="audit" draggable="true">
-            <h3 class="dashboard-card-title">安全审计</h3>
+            <h3 class="dashboard-card-title" data-i18n="dashboard_card_audit">安全审计</h3>
             <div class="audit-logs" id="dashboard-audit-logs"></div>
         </section>
     </div>
@@ -89,20 +89,20 @@
 <!-- 配置变动命令详情弹窗 -->
 <div id="modal-config-diff" class="modal">
     <div class="modal-content modal-config-diff-content">
-        <h3 id="modal-config-diff-title">命令变动</h3>
-        <div id="modal-config-diff-loading" class="loading-state">加载中...</div>
+        <h3 id="modal-config-diff-title" data-i18n="modal_config_diff_title">命令变动</h3>
+        <div id="modal-config-diff-loading" class="loading-state" data-i18n="common_loading">加载中...</div>
         <div id="modal-config-diff-body" class="hidden">
             <div class="config-diff-added">
-                <h4 class="config-diff-subtitle">新增的命令</h4>
+                <h4 class="config-diff-subtitle" data-i18n="config_diff_added">新增的命令</h4>
                 <pre id="modal-config-diff-added" class="config-diff-pre"></pre>
             </div>
             <div class="config-diff-removed">
-                <h4 class="config-diff-subtitle">删除的命令</h4>
+                <h4 class="config-diff-subtitle" data-i18n="config_diff_removed">删除的命令</h4>
                 <pre id="modal-config-diff-removed" class="config-diff-pre"></pre>
             </div>
         </div>
         <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" id="btn-modal-config-diff-close">关闭</button>
+            <button type="button" class="btn btn-secondary" id="btn-modal-config-diff-close" data-i18n="common_close">关闭</button>
         </div>
     </div>
 </div>
@@ -111,29 +111,29 @@
 <div id="panel-config-changes" class="panel">
     <header class="panel-header">
         <h2 data-i18n="panel_config_changes">配置变动</h2>
-        <p class="form-hint" style="margin-top:0.25rem;">展示最近一次备份任务中，各设备「最新备份」与「上一份备份」之间的配置变动。左侧选择设备，右侧自动展示该设备的新增/删除命令。</p>
+        <p class="form-hint" style="margin-top:0.25rem;" data-i18n="config_changes_hint">展示最近一次备份任务中，各设备「最新备份」与「上一份备份」之间的配置变动。左侧选择设备，右侧自动展示该设备的新增/删除命令。</p>
     </header>
     <div class="panel-body config-changes-layout">
         <div class="config-changes-left">
-            <div id="config-changes-page-loading" class="loading-state">加载中...</div>
+            <div id="config-changes-page-loading" class="loading-state" data-i18n="common_loading">加载中...</div>
             <div class="recent-activity" id="config-changes-page-list"></div>
-            <p class="hint" id="config-changes-page-empty" style="display:none">暂无配置变动数据（需至少有两份备份且存在差异）。</p>
+            <p class="hint" id="config-changes-page-empty" style="display:none" data-i18n="config_changes_page_empty">暂无配置变动数据（需至少有两份备份且存在差异）。</p>
         </div>
         <div class="config-changes-right" id="config-changes-detail">
             <div class="config-changes-detail-header">
-                <h3 class="config-changes-detail-title">命令变更明细</h3>
+                <h3 class="config-changes-detail-title" data-i18n="config_changes_detail_title">命令变更明细</h3>
             </div>
-            <div id="config-changes-detail-loading" class="loading-state" style="display:none">加载中...</div>
+            <div id="config-changes-detail-loading" class="loading-state" style="display:none" data-i18n="common_loading">加载中...</div>
             <div id="config-changes-detail-body" class="config-changes-detail-body hidden">
-                <button type="button" class="icon-btn" id="btn-config-changes-copy" title="复制右侧所有命令">复制</button>
+                <button type="button" class="icon-btn" id="btn-config-changes-copy" data-i18n-title="title_copy_all" data-i18n="common_copy">复制</button>
                 <div class="config-diff-added">
-                    <h4 class="config-diff-subtitle">新增的命令</h4>
+                    <h4 class="config-diff-subtitle" data-i18n="config_diff_added">新增的命令</h4>
                     <pre id="config-changes-detail-added" class="config-diff-pre"></pre>
                 </div>
                 <div class="config-diff-removed">
                     <h4 class="config-diff-subtitle">
-                        删除的命令
-                        <button type="button" class="icon-btn" id="btn-config-changes-copy-removed" title="只复制删除的命令">复制</button>
+                        <span data-i18n="config_diff_removed">删除的命令</span>
+                        <button type="button" class="icon-btn" id="btn-config-changes-copy-removed" data-i18n-title="title_copy_removed" data-i18n="common_copy">复制</button>
                     </h4>
                     <pre id="config-changes-detail-removed" class="config-diff-pre"></pre>
                 </div>
@@ -146,51 +146,51 @@
     <header class="panel-header">
         <h2 data-i18n="panel_device_list">设备列表</h2>
         <div class="panel-actions">
-            <button class="btn btn-primary" id="btn-add-device">+ 添加</button>
-            <button class="btn btn-secondary" id="btn-create-device-group">分组</button>
-            <button class="btn btn-secondary" id="btn-discover">发现</button>
-            <button class="btn btn-secondary" id="btn-import">导入</button>
-            <button class="btn btn-secondary" id="btn-export-csv">导出</button>
-            <button class="btn btn-secondary" id="btn-batch-edit">编辑</button>
-            <button class="btn btn-secondary" id="btn-batch-delete">删除</button>
+            <button class="btn btn-primary" id="btn-add-device" data-i18n="btn_add">+ 添加</button>
+            <button class="btn btn-secondary" id="btn-create-device-group" data-i18n="btn_group">分组</button>
+            <button class="btn btn-secondary" id="btn-discover" data-i18n="btn_discover">发现</button>
+            <button class="btn btn-secondary" id="btn-import" data-i18n="btn_import">导入</button>
+            <button class="btn btn-secondary" id="btn-export-csv" data-i18n="btn_export">导出</button>
+            <button class="btn btn-secondary" id="btn-batch-edit" data-i18n="btn_batch_edit">编辑</button>
+            <button class="btn btn-secondary" id="btn-batch-delete" data-i18n="btn_batch_delete">删除</button>
         </div>
     </header>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="filter-search" placeholder="搜索 主机名 / 管理 IP">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-device-search">搜索</button>
+        <input type="text" id="filter-search" data-i18n-placeholder="placeholder_search_hostname_ip" placeholder="搜索 主机名 / 管理 IP">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-device-search" data-i18n="btn_search">搜索</button>
     </div>
     <div class="table-wrap">
         <table class="table" id="device-table">
             <thead>
                 <tr>
-                    <th class="col-check"><input type="checkbox" id="device-select-all" title="全选"></th>
-                    <th>主机名
-                        <span class="device-sort-btn" data-sort-by="hostname" title="按主机名排序">
+                    <th class="col-check"><input type="checkbox" id="device-select-all" data-i18n-title="th_select_all" title="全选"></th>
+                    <th data-i18n="th_hostname">主机名
+                        <span class="device-sort-btn" data-sort-by="hostname" data-i18n-title="title_sort_hostname" title="按主机名排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>管理IP
-                        <span class="device-sort-btn" data-sort-by="ip" title="按管理IP排序">
+                    <th data-i18n="th_management_ip">管理IP
+                        <span class="device-sort-btn" data-sort-by="ip" data-i18n-title="title_sort_ip" title="按管理IP排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>设备类型
-                        <span class="device-sort-btn" data-sort-by="device_type" title="按设备类型排序">
+                    <th data-i18n="th_device_type">设备类型
+                        <span class="device-sort-btn" data-sort-by="device_type" data-i18n-title="title_sort_device_type" title="按设备类型排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>分组
-                        <span class="device-sort-btn" data-sort-by="group" title="按分组排序">
+                    <th data-i18n="th_group">分组
+                        <span class="device-sort-btn" data-sort-by="group" data-i18n-title="title_sort_group" title="按分组排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>连接方式</th>
-                    <th>启用</th>
-                    <th class="col-actions">操作</th>
+                    <th data-i18n="th_connection">连接方式</th>
+                    <th data-i18n="th_enabled">启用</th>
+                    <th class="col-actions" data-i18n="th_actions">操作</th>
                 </tr>
             </thead>
             <tbody id="device-list"></tbody>
@@ -199,14 +199,14 @@
     <div class="devices-footer">
         <div class="pagination" id="device-pagination"></div>
         <div class="per-page">
-            <span>每页</span>
+            <span data-i18n="per_page">每页</span>
             <select id="device-per-page">
                 <option value="20">20</option>
                 <option value="50" selected>50</option>
                 <option value="100">100</option>
                 <option value="200">200</option>
             </select>
-            <span>台</span>
+            <span data-i18n="per_page_devices">台</span>
         </div>
     </div>
 </div>
@@ -214,7 +214,7 @@
 <div id="panel-backup" class="panel">
     <header class="panel-header">
         <h2 data-i18n="panel_backup">执行备份</h2>
-        <button class="btn btn-primary" id="btn-run-backup">立即备份</button>
+        <button class="btn btn-primary" id="btn-run-backup" data-i18n="btn_run_backup">立即备份</button>
     </header>
     <div id="backup-status" class="backup-progress-wrap">
         <div class="backup-progress-bar">
@@ -222,28 +222,28 @@
             <div id="backup-progress-shine" class="backup-progress-shine"></div>
         </div>
         <div class="backup-progress-info">
-            <span id="backup-progress-text">就绪</span>
+            <span id="backup-progress-text" data-i18n="backup_status_ready">就绪</span>
             <span id="backup-progress-pct" class="backup-progress-pct"></span>
         </div>
     </div>
     <section class="backup-jobs-section">
-        <h3>备份任务记录</h3>
+        <h3 data-i18n="backup_jobs_title">备份任务记录</h3>
         <div class="devices-toolbar filters-bar">
-            <input type="text" id="backup-jobs-search" placeholder="搜索 执行者 / 类型">
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-backup-jobs-search">搜索</button>
+            <input type="text" id="backup-jobs-search" data-i18n-placeholder="placeholder_search_executor_type" placeholder="搜索 执行者 / 类型">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-backup-jobs-search" data-i18n="btn_search">搜索</button>
         </div>
         <div class="table-wrap">
             <table class="table table-backup-jobs">
                 <thead>
                     <tr>
-                        <th>执行时间</th>
-                        <th>类型</th>
-                        <th>执行者</th>
-                        <th>状态</th>
-                        <th>进度</th>
-                        <th>成功</th>
-                        <th>失败</th>
-                        <th>总耗时</th>
+                        <th data-i18n="th_exec_time">执行时间</th>
+                        <th data-i18n="th_type">类型</th>
+                        <th data-i18n="th_executor">执行者</th>
+                        <th data-i18n="th_status">状态</th>
+                        <th data-i18n="th_progress">进度</th>
+                        <th data-i18n="th_success">成功</th>
+                        <th data-i18n="th_fail">失败</th>
+                        <th data-i18n="th_total_duration">总耗时</th>
                     </tr>
                 </thead>
                 <tbody id="backup-jobs-list"></tbody>
@@ -252,17 +252,17 @@
         <div class="devices-footer">
             <div class="pagination" id="backup-jobs-pagination"></div>
             <div class="per-page">
-                <span>每页</span>
+                <span data-i18n="per_page">每页</span>
                 <select id="backup-jobs-per-page">
                     <option value="20">20</option>
                     <option value="50" selected>50</option>
                     <option value="100">100</option>
                     <option value="200">200</option>
                 </select>
-                <span>条</span>
+                <span data-i18n="per_page_rows">条</span>
             </div>
         </div>
-        <p class="hint" id="backup-jobs-hint">暂无任务记录，点击「立即备份」开始。</p>
+        <p class="hint" id="backup-jobs-hint" data-i18n="backup_jobs_empty">暂无任务记录，点击「立即备份」开始。</p>
     </section>
 </div>
 
@@ -271,32 +271,32 @@
         <h2 data-i18n="panel_logs">备份日志</h2>
     </header>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="log-search" placeholder="搜索 主机名 / 管理 IP">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs">搜索</button>
+        <input type="text" id="log-search" data-i18n-placeholder="placeholder_search_hostname_ip" placeholder="搜索 主机名 / 管理 IP">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs" data-i18n="btn_search">搜索</button>
     </div>
     <div class="table-wrap table-resizable">
         <table class="table table-logs" id="log-table">
             <thead>
                 <tr>
-                    <th data-col="time">时间
-                        <span class="log-sort-btn" data-sort-by="created_at" title="按时间排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="time" data-i18n="th_time">时间
+                        <span class="log-sort-btn" data-sort-by="created_at" data-i18n-title="title_sort_time" title="按时间排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="hostname">主机名
-                        <span class="log-sort-btn" data-sort-by="hostname" title="按主机名排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="hostname" data-i18n="th_hostname">主机名
+                        <span class="log-sort-btn" data-sort-by="hostname" data-i18n-title="title_sort_hostname" title="按主机名排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="ip">管理IP
-                        <span class="log-sort-btn" data-sort-by="ip" title="按管理IP排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="ip" data-i18n="th_management_ip">管理IP
+                        <span class="log-sort-btn" data-sort-by="ip" data-i18n-title="title_sort_ip" title="按管理IP排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="type">设备类型
-                        <span class="log-sort-btn" data-sort-by="device_type" title="按设备类型排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="type" data-i18n="th_device_type">设备类型
+                        <span class="log-sort-btn" data-sort-by="device_type" data-i18n-title="title_sort_device_type" title="按设备类型排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="status">状态
-                        <span class="log-sort-btn" data-sort-by="status" title="按状态排序（失败在前）"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="status" data-i18n="th_status">状态
+                        <span class="log-sort-btn" data-sort-by="status" data-i18n-title="title_sort_status" title="按状态排序（失败在前）"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="duration">耗时
-                        <span class="log-sort-btn" data-sort-by="duration_seconds" title="按耗时排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
+                    <th data-col="duration" data-i18n="th_duration">耗时
+                        <span class="log-sort-btn" data-sort-by="duration_seconds" data-i18n-title="title_sort_duration" title="按耗时排序"><span class="sort-tri sort-tri-up">▲</span><span class="sort-tri sort-tri-down">▼</span></span>
                         <span class="resize-handle"></span></th>
-                    <th data-col="config">配置文件
+                    <th data-col="config" data-i18n="th_config_file">配置文件
                         <span class="resize-handle"></span></th>
                 </tr>
             </thead>
@@ -306,14 +306,14 @@
     <div class="devices-footer">
         <div class="pagination" id="log-pagination"></div>
         <div class="per-page">
-            <span>每页</span>
+            <span data-i18n="per_page">每页</span>
             <select id="log-per-page">
                 <option value="20">20</option>
                 <option value="50" selected>50</option>
                 <option value="100">100</option>
                 <option value="200">200</option>
             </select>
-            <span>条</span>
+            <span data-i18n="per_page_rows">条</span>
         </div>
     </div>
 </div>
@@ -322,39 +322,39 @@
     <header class="panel-header">
         <h2 data-i18n="panel_configs">已备份配置</h2>
         <div class="config-content-search-wrap">
-            <input type="text" id="config-search-text" class="config-content-search-input" placeholder="搜索配置内容（如 ACL、IP、命令片段）" aria-label="全文搜索配置">
-            <button type="button" class="btn config-content-search-btn" id="btn-config-search">搜索</button>
+            <input type="text" id="config-search-text" class="config-content-search-input" data-i18n-placeholder="placeholder_config_search" placeholder="搜索配置内容（如 ACL、IP、命令片段）" aria-label="全文搜索配置">
+            <button type="button" class="btn config-content-search-btn" id="btn-config-search" data-i18n="btn_search">搜索</button>
         </div>
     </header>
     <div class="config-search-result config-search-result--empty" id="config-search-result"></div>
     <div class="devices-toolbar filters-bar">
-        <input type="text" id="config-filter-search" placeholder="搜索 主机名 / 管理 IP" aria-label="过滤设备列表">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-config-filter-search">搜索</button>
+        <input type="text" id="config-filter-search" data-i18n-placeholder="placeholder_search_hostname_ip" placeholder="搜索 主机名 / 管理 IP" aria-label="过滤设备列表">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-config-filter-search" data-i18n="btn_search">搜索</button>
     </div>
     <div class="table-wrap">
         <table class="table" id="config-device-table">
             <thead>
                 <tr>
-                    <th>主机名
-                        <span class="config-device-sort-btn" data-sort-by="hostname" title="按主机名排序">
+                    <th data-i18n="th_hostname">主机名
+                        <span class="config-device-sort-btn" data-sort-by="hostname" data-i18n-title="title_sort_hostname" title="按主机名排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>管理IP
-                        <span class="config-device-sort-btn" data-sort-by="ip" title="按管理IP排序">
+                    <th data-i18n="th_management_ip">管理IP
+                        <span class="config-device-sort-btn" data-sort-by="ip" data-i18n-title="title_sort_ip" title="按管理IP排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>设备类型
-                        <span class="config-device-sort-btn" data-sort-by="device_type" title="按设备类型排序">
+                    <th data-i18n="th_device_type">设备类型
+                        <span class="config-device-sort-btn" data-sort-by="device_type" data-i18n-title="title_sort_device_type" title="按设备类型排序">
                             <span class="sort-tri sort-tri-up">▲</span>
                             <span class="sort-tri sort-tri-down">▼</span>
                         </span>
                     </th>
-                    <th>配置文件数</th>
-                    <th class="col-actions">操作</th>
+                    <th data-i18n="th_config_count">配置文件数</th>
+                    <th class="col-actions" data-i18n="th_actions">操作</th>
                 </tr>
             </thead>
                     <tbody id="config-device-list"></tbody>
@@ -362,20 +362,20 @@
             </div>
             <div class="devices-footer">
                 <div class="pagination" id="config-pagination">
-                    <span id="config-pagination-info">共 0 条</span>
-                    <button type="button" class="btn btn-secondary btn-sm" id="config-prev" disabled>上一页</button>
+                    <span id="config-pagination-info" data-i18n="pagination_total">共 0 条</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="config-prev" data-i18n="pagination_prev" disabled>上一页</button>
                     <span id="config-page-nums">1 / 1</span>
-                    <button type="button" class="btn btn-secondary btn-sm" id="config-next" disabled>下一页</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="config-next" data-i18n="pagination_next" disabled>下一页</button>
                 </div>
                 <div class="per-page">
-                    <span>每页</span>
+                    <span data-i18n="per_page">每页</span>
                     <select id="config-per-page" aria-label="每页显示条数">
                         <option value="20">20</option>
                         <option value="50" selected>50</option>
                         <option value="100">100</option>
                         <option value="200">200</option>
                     </select>
-                    <span>条</span>
+                    <span data-i18n="per_page_rows">条</span>
                 </div>
             </div>
     <div id="config-tree" class="hidden"></div>
@@ -384,59 +384,59 @@
 <!-- 单设备：历史备份与配置对比（从「已备份配置」点入，不单独成页） -->
 <div id="panel-config-device" class="panel config-device-page">
     <nav class="config-device-breadcrumb">
-        <a href="#" id="config-device-back">← 已备份配置</a>
+        <a href="#" id="config-device-back" data-i18n="breadcrumb_configs">← 已备份配置</a>
         <span class="sep">/</span>
         <span class="current" id="config-device-current-hostname">—</span>
     </nav>
     <header class="config-device-header">
         <h1 id="config-device-title">—</h1>
-        <p class="hint">历史配置文件列表，可选择两个版本进行对比。</p>
+        <p class="hint" data-i18n="config_device_hint">历史配置文件列表，可选择两个版本进行对比。</p>
     </header>
     <section class="config-compliance-section card-glassy">
-        <h2>配置合规基础检查</h2>
-        <div id="compliance-loading" class="loading-state">合规检查中...</div>
+        <h2 data-i18n="section_compliance">配置合规基础检查</h2>
+        <div id="compliance-loading" class="loading-state" data-i18n="compliance_loading">合规检查中...</div>
         <div id="compliance-result" class="compliance-result hidden"></div>
-        <p id="compliance-empty" class="empty-state hidden">暂无可用配置文件，无法进行合规检查。</p>
+        <p id="compliance-empty" class="empty-state hidden" data-i18n="compliance_empty">暂无可用配置文件，无法进行合规检查。</p>
     </section>
     <section class="config-diff-section card-glassy">
-        <h2>配置对比（最新 vs 上一份）</h2>
-        <p class="hint diff-section-desc">默认对比「最新备份」与「上一份备份」：<strong>左侧 = 最新</strong>，<strong>右侧 = 上一份</strong>。仅左侧有内容 = 新增的命令，仅右侧有内容 = 删除的命令。可切换其他版本后点击「对比」。</p>
+        <h2 data-i18n="section_diff">配置对比（最新 vs 上一份）</h2>
+        <p class="hint diff-section-desc" data-i18n="diff_hint_desc">默认对比「最新备份」与「上一份备份」：<strong>左侧 = 最新</strong>，<strong>右侧 = 上一份</strong>。仅左侧有内容 = 新增的命令，仅右侧有内容 = 删除的命令。可切换其他版本后点击「对比」。</p>
         <div class="diff-controls">
-            <label>版本 A（较新）</label>
+            <label data-i18n="label_version_a">版本 A（较新）</label>
             <select id="diff-file-a"></select>
-            <label>版本 B（较旧）</label>
+            <label data-i18n="label_version_b">版本 B（较旧）</label>
             <select id="diff-file-b"></select>
-            <button type="button" class="btn btn-primary" id="btn-diff">对比</button>
-            <button type="button" class="btn btn-primary" id="btn-diff-toggle-changed">显示不同</button>
+            <button type="button" class="btn btn-primary" id="btn-diff" data-i18n="btn_diff">对比</button>
+            <button type="button" class="btn btn-primary" id="btn-diff-toggle-changed" data-i18n="btn_diff_toggle">显示不同</button>
         </div>
-        <div id="diff-loading" class="loading-state hidden">加载中...</div>
+        <div id="diff-loading" class="loading-state hidden" data-i18n="common_loading">加载中...</div>
         <div id="diff-result" class="diff-result hidden"></div>
-        <p id="diff-hint" class="hint">选择两个版本后点击「对比」查看差异。</p>
+        <p id="diff-hint" class="hint" data-i18n="diff_hint">选择两个版本后点击「对比」查看差异。</p>
     </section>
     <section class="config-files-section card-glassy">
-        <h2>配置文件列表</h2>
+        <h2 data-i18n="section_config_files">配置文件列表</h2>
         <div class="devices-toolbar filters-bar config-files-toolbar">
-            <input type="text" id="config-files-search" placeholder="搜索 配置文件名" aria-label="过滤配置文件列表">
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-config-files-search">搜索</button>
+            <input type="text" id="config-files-search" data-i18n-placeholder="placeholder_search_config_filename" placeholder="搜索 配置文件名" aria-label="过滤配置文件列表">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-config-files-search" data-i18n="btn_search">搜索</button>
         </div>
-        <div id="config-files-loading" class="loading-state">加载中...</div>
+        <div id="config-files-loading" class="loading-state" data-i18n="common_loading">加载中...</div>
         <ul id="config-files-list" class="config-files-list-standalone"></ul>
-        <p id="config-files-empty" class="empty-state hidden">暂无备份文件</p>
+        <p id="config-files-empty" class="empty-state hidden" data-i18n="config_files_empty">暂无备份文件</p>
     </section>
 </div>
 
 <!-- 删除某设备所有备份配置的确认弹窗（需输入「删除」） -->
 <div id="modal-delete-backups" class="modal">
     <div class="modal-content">
-        <h3>删除备份配置</h3>
-        <p id="modal-delete-backups-msg" class="hint">确定删除该设备的所有备份配置文件？</p>
+        <h3 data-i18n="modal_delete_backups_title">删除备份配置</h3>
+        <p id="modal-delete-backups-msg" class="hint" data-i18n="modal_delete_backups_msg">确定删除该设备的所有备份配置文件？</p>
         <div class="form-row">
-            <label>请输入「删除」以确认</label>
-            <input type="text" id="delete-backups-confirm-input" placeholder="删除" autocomplete="off">
+            <label data-i18n="label_confirm_delete">请输入「删除」以确认</label>
+            <input type="text" id="delete-backups-confirm-input" data-i18n-placeholder="label_confirm_delete" placeholder="删除" autocomplete="off">
         </div>
         <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" id="btn-delete-backups-cancel">取消</button>
-            <button type="button" class="btn btn-delete" id="btn-delete-backups-confirm" disabled>确认删除</button>
+            <button type="button" class="btn btn-secondary" id="btn-delete-backups-cancel" data-i18n="common_cancel">取消</button>
+            <button type="button" class="btn btn-delete" id="btn-delete-backups-confirm" data-i18n="btn_confirm_delete" disabled>确认删除</button>
         </div>
     </div>
 </div>
@@ -444,23 +444,23 @@
 <!-- 数据库备份内容说明弹窗 -->
 <div id="modal-db-backup" class="modal">
     <div class="modal-content">
-        <h3>数据库备份内容</h3>
-        <p class="form-hint" style="margin-bottom:0.75rem;">当前备份将包含以下数据（仅数据库，不含配置文件等）：</p>
+        <h3 data-i18n="modal_db_backup_title">数据库备份内容</h3>
+        <p class="form-hint" style="margin-bottom:0.75rem;" data-i18n="modal_db_backup_hint">当前备份将包含以下数据（仅数据库，不含配置文件等）：</p>
         <ul id="modal-db-backup-list" class="modal-db-backup-list">
-            <li><strong>设备</strong>：设备列表（IP、主机名、类型、账号、连接方式等）</li>
-            <li><strong>备份日志</strong>：每次备份的执行记录（状态、耗时、配置文件路径等）</li>
-            <li><strong>备份任务记录</strong>：全量/单台备份任务及进度</li>
-            <li><strong>应用设置</strong>：系统名称、时区、备份频率、LDAP、Logo 等键值对</li>
-            <li><strong>登录日志</strong>：用户登录记录（用户名、IP、认证方式）</li>
-            <li><strong>审计日志</strong>：敏感操作记录</li>
-            <li><strong>配置下发日志</strong>：配置推送记录</li>
-            <li><strong>用户</strong>：本地与 LDAP 用户及角色</li>
-            <li><strong>配置变动记录</strong>：首页配置变动卡片数据</li>
-            <li><strong>设备类型配置</strong>：设备类型及备份/连接命令配置</li>
+            <li data-i18n="db_backup_item_devices"><strong>设备</strong>：设备列表（IP、主机名、类型、账号、连接方式等）</li>
+            <li data-i18n="db_backup_item_logs"><strong>备份日志</strong>：每次备份的执行记录（状态、耗时、配置文件路径等）</li>
+            <li data-i18n="db_backup_item_jobs"><strong>备份任务记录</strong>：全量/单台备份任务及进度</li>
+            <li data-i18n="db_backup_item_settings"><strong>应用设置</strong>：系统名称、时区、备份频率、LDAP、Logo 等键值对</li>
+            <li data-i18n="db_backup_item_login_logs"><strong>登录日志</strong>：用户登录记录（用户名、IP、认证方式）</li>
+            <li data-i18n="db_backup_item_audit"><strong>审计日志</strong>：敏感操作记录</li>
+            <li data-i18n="db_backup_item_push_logs"><strong>配置下发日志</strong>：配置推送记录</li>
+            <li data-i18n="db_backup_item_users"><strong>用户</strong>：本地与 LDAP 用户及角色</li>
+            <li data-i18n="db_backup_item_config_changes"><strong>配置变动记录</strong>：首页配置变动卡片数据</li>
+            <li data-i18n="db_backup_item_device_types"><strong>设备类型配置</strong>：设备类型及备份/连接命令配置</li>
         </ul>
         <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" id="btn-db-backup-cancel">取消</button>
-            <button type="button" class="btn btn-primary" id="btn-db-backup-confirm">确认下载</button>
+            <button type="button" class="btn btn-secondary" id="btn-db-backup-cancel" data-i18n="common_cancel">取消</button>
+            <button type="button" class="btn btn-primary" id="btn-db-backup-confirm" data-i18n="btn_confirm_download">确认下载</button>
         </div>
     </div>
 </div>
@@ -470,8 +470,8 @@
         <h2 data-i18n="panel_settings">系统设置</h2>
         <div class="panel-header-actions">
             <button class="btn btn-primary" id="btn-save-settings" data-i18n="btn_save">保存</button>
-            <button class="btn btn-secondary" id="btn-reset-settings-defaults" title="将所有系统设置恢复为系统默认参数值">恢复默认设置</button>
-            <button class="btn btn-secondary" id="btn-restart-service" title="重启后备份频率等设置方可完全生效">重启服务</button>
+            <button class="btn btn-secondary" id="btn-reset-settings-defaults" data-i18n-title="title_reset_defaults" data-i18n="btn_reset_defaults">恢复默认设置</button>
+            <button class="btn btn-secondary" id="btn-restart-service" data-i18n-title="title_restart_service" data-i18n="btn_restart_service">重启服务</button>
         </div>
     </header>
     <div class="form">
@@ -490,59 +490,59 @@
                 <section class="settings-section active" id="settings-section-general">
                     <h3 class="settings-subtitle" data-i18n="settings_general">通用设置</h3>
                     <div class="form-row">
-                        <label>系统名称</label>
-                        <input type="text" id="setting-system-name" placeholder="如：配置备份中心">
-                        <span class="form-hint">将显示在页面左上角及登录页标题处</span>
+                        <label data-i18n="label_system_name">系统名称</label>
+                        <input type="text" id="setting-system-name" data-i18n-placeholder="placeholder_system_name" placeholder="如：配置备份中心">
+                        <span class="form-hint" data-i18n="hint_system_name">将显示在页面左上角及登录页标题处</span>
                     </div>
                     <div class="form-row">
-                        <label>系统时区</label>
+                        <label data-i18n="label_timezone">系统时区</label>
                         <select id="setting-timezone">
-                            <option value="Asia/Shanghai">中国 (Asia/Shanghai)</option>
-                            <option value="Asia/Hong_Kong">香港 (Asia/Hong_Kong)</option>
-                            <option value="Asia/Tokyo">东京 (Asia/Tokyo)</option>
-                            <option value="UTC">UTC</option>
-                            <option value="America/New_York">纽约 (America/New_York)</option>
-                            <option value="Europe/London">伦敦 (Europe/London)</option>
+                            <option value="Asia/Shanghai" data-i18n="timezone_china">中国 (Asia/Shanghai)</option>
+                            <option value="Asia/Hong_Kong" data-i18n="timezone_hongkong">香港 (Asia/Hong_Kong)</option>
+                            <option value="Asia/Tokyo" data-i18n="timezone_tokyo">东京 (Asia/Tokyo)</option>
+                            <option value="UTC" data-i18n="timezone_utc">UTC</option>
+                            <option value="America/New_York" data-i18n="timezone_newyork">纽约 (America/New_York)</option>
+                            <option value="Europe/London" data-i18n="timezone_london">伦敦 (Europe/London)</option>
                         </select>
                     </div>
                     <div class="form-row">
                         <label data-i18n="label_system_language">系统语言</label>
                         <select id="setting-language">
-                            <option value="zh">简体中文</option>
-                            <option value="en">English</option>
+                            <option value="zh" data-i18n="lang_zh">简体中文</option>
+                            <option value="en" data-i18n="lang_en">English</option>
                         </select>
                         <span class="form-hint" data-i18n="hint_system_language">切换界面显示语言，保存后刷新生效</span>
                     </div>
                     <div class="form-row">
-                        <label>页脚信息（版权、备案号等）</label>
-                        <input type="text" id="setting-footer-text" placeholder="如：© 2025 公司名 | 京ICP备xxxxxxxx号">
-                        <span class="form-hint">将显示在页面最下方页脚，留空则不显示</span>
+                        <label data-i18n="label_footer">页脚信息（版权、备案号等）</label>
+                        <input type="text" id="setting-footer-text" data-i18n-placeholder="placeholder_footer" placeholder="如：© 2025 公司名 | 京ICP备xxxxxxxx号">
+                        <span class="form-hint" data-i18n="hint_footer">将显示在页面最下方页脚，留空则不显示</span>
                     </div>
                     <div class="form-row">
-                        <label>会话超时（分钟）</label>
-                        <input type="number" id="setting-session-timeout" min="5" max="1440" placeholder="如 30，0 表示不超时">
-                        <span class="form-hint">无操作多少分钟后自动退出登录，0 表示不限制</span>
+                        <label data-i18n="label_session_timeout">会话超时（分钟）</label>
+                        <input type="number" id="setting-session-timeout" min="5" max="1440" data-i18n-placeholder="placeholder_session_timeout" placeholder="如 30，0 表示不超时">
+                        <span class="form-hint" data-i18n="hint_session_timeout">无操作多少分钟后自动退出登录，0 表示不限制</span>
                     </div>
                     <div class="form-row">
-                        <label>登录失败锁定</label>
+                        <label data-i18n="label_login_lockout">登录失败锁定</label>
                         <div class="form-row-inline">
-                            <input type="number" id="setting-login-lockout-attempts" min="0" max="20" placeholder="次数"> 次失败后
-                            <input type="number" id="setting-login-lockout-minutes" min="0" max="120" placeholder="分钟"> 分钟内禁止登录（0 表示不锁定）
+                            <input type="number" id="setting-login-lockout-attempts" min="0" max="20" data-i18n-placeholder="label_attempts" placeholder="次数"> <span data-i18n="label_after_fail">次失败后</span>
+                            <input type="number" id="setting-login-lockout-minutes" min="0" max="120" data-i18n-placeholder="placeholder_minutes" placeholder="分钟"> <span data-i18n="label_lockout_minutes">分钟内禁止登录（0 表示不锁定）</span>
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>密码复杂度</label>
+                        <label data-i18n="label_password_policy">密码复杂度</label>
                         <div class="form-row-inline form-row-checkboxes">
-                            <label><input type="number" id="setting-password-min-length" min="6" max="32" placeholder="6"> 最少字符数</label>
-                            <label><input type="checkbox" id="setting-password-require-digit"> 含数字</label>
-                            <label><input type="checkbox" id="setting-password-require-upper"> 含大写</label>
-                            <label><input type="checkbox" id="setting-password-require-lower"> 含小写</label>
-                            <label><input type="checkbox" id="setting-password-require-special"> 含特殊字符</label>
+                            <label><input type="number" id="setting-password-min-length" min="6" max="32" placeholder="6"> <span data-i18n="label_min_chars">最少字符数</span></label>
+                            <label><input type="checkbox" id="setting-password-require-digit"> <span data-i18n="label_require_digit">含数字</span></label>
+                            <label><input type="checkbox" id="setting-password-require-upper"> <span data-i18n="label_require_upper">含大写</span></label>
+                            <label><input type="checkbox" id="setting-password-require-lower"> <span data-i18n="label_require_lower">含小写</span></label>
+                            <label><input type="checkbox" id="setting-password-require-special"> <span data-i18n="label_require_special">含特殊字符</span></label>
                         </div>
-                        <span class="form-hint">新建/修改本地用户密码时校验，留空或不勾选表示不强制</span>
+                        <span class="form-hint" data-i18n="hint_password_policy">新建/修改本地用户密码时校验，留空或不勾选表示不强制</span>
                     </div>
                     <div class="form-row">
-                        <label>设备列表默认每页条数</label>
+                        <label data-i18n="label_device_per_page">设备列表默认每页条数</label>
                         <select id="setting-device-per-page">
                             <option value="20">20</option>
                             <option value="50">50</option>
@@ -551,7 +551,7 @@
                         </select>
                     </div>
                     <div class="form-row">
-                        <label>备份日志默认每页条数</label>
+                        <label data-i18n="label_log_per_page">备份日志默认每页条数</label>
                         <select id="setting-log-per-page">
                             <option value="20">20</option>
                             <option value="50">50</option>
@@ -559,112 +559,112 @@
                         </select>
                     </div>
                     <div class="form-row">
-                        <label>系统 Logo</label>
+                        <label data-i18n="label_logo">系统 Logo</label>
                         <div class="form-row-inline">
                             <div class="settings-logo-preview">
                                 <img id="setting-logo-preview" class="settings-logo-img hidden" alt="当前 Logo">
-                                <span id="setting-logo-default-hint">当前使用默认图标</span>
+                                <span id="setting-logo-default-hint" data-i18n="hint_logo_default">当前使用默认图标</span>
                             </div>
                             <div class="settings-logo-actions">
                                 <input type="file" id="setting-logo-file" accept="image/*">
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-logo-upload">上传 Logo</button>
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-logo-reset">重置为默认</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-logo-upload" data-i18n="btn_upload_logo">上传 Logo</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-logo-reset" data-i18n="btn_reset_logo">重置为默认</button>
                             </div>
                         </div>
-                        <span class="form-hint">Logo 最大尺寸 64×64 像素：上传图片在范围内保持原尺寸，超过则按比例缩小到 64×64 以内（不拉伸）。支持 PNG/JPG/GIF/WebP/ICO，单文件 512KB 以内。</span>
+                        <span class="form-hint" data-i18n="hint_logo">Logo 最大尺寸 64×64 像素：上传图片在范围内保持原尺寸，超过则按比例缩小到 64×64 以内（不拉伸）。支持 PNG/JPG/GIF/WebP/ICO，单文件 512KB 以内。</span>
                     </div>
                     <div class="form-row">
-                        <label>HTTPS 证书</label>
+                        <label data-i18n="label_ssl_cert">HTTPS 证书</label>
                         <div class="form-row-inline" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
-                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span>证书文件</span><input type="file" id="ssl-cert-file" accept=".crt,.pem,.cer" title="上传 SSL/TLS 域名证书，PEM 格式（含 -----BEGIN CERTIFICATE-----），支持 .crt / .pem / .cer"></span>
-                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span>私钥文件</span><input type="file" id="ssl-key-file" accept=".key,.pem" title="上传与证书配对的私钥，PEM 格式（含 -----BEGIN PRIVATE KEY----- 或 -----BEGIN RSA PRIVATE KEY-----），支持 .key / .pem"></span>
+                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span data-i18n="label_cert_file">证书文件</span><input type="file" id="ssl-cert-file" accept=".crt,.pem,.cer" data-i18n-title="title_cert_file" title="上传 SSL/TLS 域名证书"></span>
+                            <span style="display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;"><span data-i18n="label_key_file">私钥文件</span><input type="file" id="ssl-key-file" accept=".key,.pem" data-i18n-title="title_key_file" title="上传与证书配对的私钥"></span>
                         </div>
                         <div class="form-row-inline" style="margin-top: 0.5rem;">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-ssl-cert">上传域名证书</button>
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-update-ssl-cert" title="重新生成自签名证书（有效期 100 年）">重新生成自签名</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-ssl-cert" data-i18n="btn_upload_cert">上传域名证书</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-update-ssl-cert" data-i18n-title="title_regenerate_cert" data-i18n="btn_regenerate_cert" title="重新生成自签名证书（有效期 100 年）">重新生成自签名</button>
                         </div>
-                        <span class="form-hint">证书文件后缀通常为 .crt / .pem / .cer 格式，私钥文件后缀通常为 .key / .pem 格式，上传或重新生成后需重启服务生效。</span>
+                        <span class="form-hint" data-i18n="hint_ssl_cert">证书文件后缀通常为 .crt / .pem / .cer 格式，私钥文件后缀通常为 .key / .pem 格式，上传或重新生成后需重启服务生效。</span>
                     </div>
                 </section>
 
                 <!-- 自动发现（SNMP + 规则） -->
                 <section class="settings-section" id="settings-section-discovery">
-                    <h3 class="settings-subtitle">自动发现</h3>
-                    <p class="form-hint">
+                    <h3 class="settings-subtitle" data-i18n="settings_discovery">自动发现</h3>
+                    <p class="form-hint" data-i18n="discovery_hint">
                         通过 SNMP 从指定 IP 段自动发现网络设备（获取主机名、设备类型和管理 IP），并自动加入设备管理列表。
                     </p>
                     <div class="form-row">
-                        <label>自动发现频率</label>
+                        <label data-i18n="label_discovery_freq">自动发现频率</label>
                         <div class="form-row-inline">
                             <select id="setting-discovery-frequency">
-                                <option value="none">手动执行</option>
-                                <option value="hourly">每小时（整点）</option>
-                                <option value="twice_daily">每12小时（0点和12点）</option>
-                                <option value="daily">每天凌晨02:00</option>
-                                <option value="weekly">每周日凌晨02:00</option>
-                                <option value="custom">自定义（高级）</option>
+                                <option value="none" data-i18n="freq_manual">手动执行</option>
+                                <option value="hourly" data-i18n="freq_hourly">每小时（整点）</option>
+                                <option value="twice_daily" data-i18n="freq_twice_daily">每12小时（0点和12点）</option>
+                                <option value="daily" data-i18n="freq_daily">每天凌晨02:00</option>
+                                <option value="weekly" data-i18n="freq_weekly">每周日凌晨02:00</option>
+                                <option value="custom" data-i18n="freq_custom">自定义（高级）</option>
                             </select>
-                            <span class="form-hint">用于控制后台定时执行自动发现规则的频率；建议在规则配置完善后再开启。</span>
+                            <span class="form-hint" data-i18n="hint_discovery_freq">用于控制后台定时执行自动发现规则的频率；建议在规则配置完善后再开启。</span>
                         </div>
                         <div class="form-row form-row-sub" id="setting-discovery-custom-cron-wrap" style="display:none">
-                            <label>Cron 表达式</label>
-                            <input type="text" id="setting-discovery-custom-cron" placeholder="如 0 2 * * * 表示每天 02:00">
+                            <label data-i18n="label_cron">Cron 表达式</label>
+                            <input type="text" id="setting-discovery-custom-cron" data-i18n-placeholder="placeholder_cron" placeholder="如 0 2 * * * 表示每天 02:00">
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>全局 SNMP 设置</label>
+                        <label data-i18n="label_snmp">全局 SNMP 设置</label>
                         <div class="form-row-inline">
                             <select id="setting-snmp-version">
-                                <option value="2c">SNMP v2c</option>
-                                <option value="1">SNMP v1</option>
+                                <option value="2c" data-i18n="snmp_v2c">SNMP v2c</option>
+                                <option value="1" data-i18n="snmp_v1">SNMP v1</option>
                             </select>
-                            <input type="text" id="setting-snmp-community" placeholder="Community，如 public" style="max-width: 220px;">
-                            <input type="number" id="setting-snmp-timeout" min="500" max="10000" placeholder="超时(ms)" style="width: 110px;">
+                            <input type="text" id="setting-snmp-community" data-i18n-placeholder="placeholder_snmp_community" placeholder="Community，如 public" style="max-width: 220px;">
+                            <input type="number" id="setting-snmp-timeout" min="500" max="10000" data-i18n-placeholder="placeholder_snmp_timeout" placeholder="超时(ms)" style="width: 110px;">
                             <span class="form-hint" style="margin:0 0.5rem 0 0;">ms</span>
-                            <input type="number" id="setting-snmp-retries" min="0" max="5" placeholder="重试次数" style="width: 110px;">
-                            <span class="form-hint" style="margin:0;">次</span>
+                            <input type="number" id="setting-snmp-retries" min="0" max="5" data-i18n-placeholder="placeholder_snmp_retries" placeholder="重试次数" style="width: 110px;">
+                            <span class="form-hint" style="margin:0;" data-i18n="label_times">次</span>
                         </div>
-                        <span class="form-hint">用于自动发现时的 SNMP 访问参数；Community 可在单条规则中单独覆盖。超时为每次 SNMP 请求的等待时间，重试次数为失败后额外请求的次数。</span>
+                        <span class="form-hint" data-i18n="hint_snmp">用于自动发现时的 SNMP 访问参数；Community 可在单条规则中单独覆盖。超时为每次 SNMP 请求的等待时间，重试次数为失败后额外请求的次数。</span>
                     </div>
 
                     <div class="form-row">
-                        <label>设备类型过滤关键字</label>
+                        <label data-i18n="label_type_keywords">设备类型过滤关键字</label>
                         <div id="discovery-type-keywords-rows" class="form-row-sub"></div>
                         <div class="form-row-inline" style="margin-top:0.5rem;">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-discovery-type-keyword-add">+ 添加一行</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-discovery-type-keyword-add" data-i18n="btn_add_row">+ 添加一行</button>
                         </div>
-                        <span class="form-hint">
+                        <span class="form-hint" data-i18n="hint_type_keywords">
                             每行：左侧选择设备类型（从设备类型管理同步），右侧输入匹配关键字（逗号分隔）。当 SNMP 返回值包含任一关键字时，归类为该设备类型。
                         </span>
                     </div>
 
                     <div class="form-row">
-                        <label>主机名过滤</label>
+                        <label data-i18n="label_hostname_filter">主机名过滤</label>
                         <div class="form-row-inline">
-                            <span>按分隔符</span>
+                            <span data-i18n="label_split_by">按分隔符</span>
                             <input type="text" id="setting-discovery-hostname-split" placeholder="." maxlength="4" style="width:60px;">
-                            <span>分段，取前</span>
+                            <span data-i18n="label_segments">分段，取前</span>
                             <input type="number" id="setting-discovery-hostname-segment" min="1" max="10" value="1" style="width:60px;">
-                            <span>段拼成主机名</span>
+                            <span data-i18n="label_segment_count">段拼成主机名</span>
                         </div>
-                        <span class="form-hint">主机名为域名格式时，按分隔符分段后取「前 N 段」作为主机名：无后缀如 ABC1.PE1. 取前 2 段得 ABC1.PE1；有后缀如 ABC1.PE1.example.com 取前 2 段得 ABC1.PE1。留空分隔符则不处理。</span>
+                        <span class="form-hint" data-i18n="hint_hostname_filter">主机名为域名格式时，按分隔符分段后取「前 N 段」作为主机名：无后缀如 ABC1.PE1. 取前 2 段得 ABC1.PE1；有后缀如 ABC1.PE1.example.com 取前 2 段得 ABC1.PE1。留空分隔符则不处理。</span>
                     </div>
                     <div class="form-row">
-                        <label>添加设备唯一性</label>
+                        <label data-i18n="label_unique_by">添加设备唯一性</label>
                         <div class="form-row-inline">
                             <select id="setting-discovery-unique-by">
-                                <option value="hostname">按主机名</option>
-                                <option value="ip">按管理 IP</option>
+                                <option value="hostname" data-i18n="unique_by_hostname">按主机名</option>
+                                <option value="ip" data-i18n="unique_by_ip">按管理 IP</option>
                             </select>
                         </div>
-                        <span class="form-hint">自动发现时，若设备列表中已存在相同主机名或相同 IP（依此处选择），则跳过不重复添加。默认按主机名。</span>
+                        <span class="form-hint" data-i18n="hint_unique_by">自动发现时，若设备列表中已存在相同主机名或相同 IP（依此处选择），则跳过不重复添加。默认按主机名。</span>
                     </div>
                     <div class="form-row">
-                        <label>快速扫描（临时）</label>
-                        <p class="form-hint">输入 IP 段或列表，立即扫描 SNMP 可达设备，仅展示结果，不会自动入库。</p>
+                        <label data-i18n="label_quick_scan">快速扫描（临时）</label>
+                        <p class="form-hint" data-i18n="hint_quick_scan">输入 IP 段或列表，立即扫描 SNMP 可达设备，仅展示结果，不会自动入库。</p>
                         <div class="form-row-inline" style="align-items:flex-start; gap:0.75rem;">
-                            <textarea id="discovery-quick-ip-range" rows="3" style="flex:1;" placeholder="示例：&#10;192.168.1.1-192.168.1.50&#10;192.168.2.0/24"></textarea>
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-discovery-quick-scan">扫描</button>
+                            <textarea id="discovery-quick-ip-range" rows="3" style="flex:1;" data-i18n-placeholder="placeholder_quick_scan" placeholder="示例：&#10;192.168.1.1-192.168.1.50&#10;192.168.2.0/24"></textarea>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-discovery-quick-scan" data-i18n="btn_scan">扫描</button>
                         </div>
                         <div class="form-row-sub" id="discovery-quick-result" style="display:none;">
                             <pre id="discovery-quick-result-text" class="config-diff-pre" style="max-height:160px;"></pre>
@@ -672,21 +672,21 @@
                     </div>
 
                     <div class="form-row">
-                        <label>自动发现规则</label>
-                        <p class="form-hint">配置规则后，可一键运行按 IP 段 + SNMP 自动将设备加入「设备管理」。</p>
+                        <label data-i18n="label_discovery_rules">自动发现规则</label>
+                        <p class="form-hint" data-i18n="hint_discovery_rules">配置规则后，可一键运行按 IP 段 + SNMP 自动将设备加入「设备管理」。</p>
                         <div class="user-list-toolbar">
-                            <button type="button" class="btn btn-primary btn-sm" id="btn-discovery-rule-new">+ 新建规则</button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-discovery-rule-new" data-i18n="btn_new_rule">+ 新建规则</button>
                         </div>
                         <div class="table-wrapper discovery-rule-table-wrapper">
                             <table class="table discovery-rule-table" id="discovery-rule-table">
                                 <thead>
                                     <tr>
-                                        <th>规则名称</th>
-                                        <th>IP 范围</th>
-                                        <th>主机名 OID</th>
-                                        <th>设备类型 OID</th>
-                                        <th>分组</th>
-                                        <th style="width: 260px;">操作</th>
+                                        <th data-i18n="th_rule_name">规则名称</th>
+                                        <th data-i18n="th_ip_range">IP 范围</th>
+                                        <th data-i18n="th_hostname_oid">主机名 OID</th>
+                                        <th data-i18n="th_type_oid">设备类型 OID</th>
+                                        <th data-i18n="th_group">分组</th>
+                                        <th style="width: 260px;" data-i18n="th_actions">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="discovery-rule-list">
@@ -728,29 +728,29 @@
                         <div class="form">
                             <div class="form-row">
                                 <label>规则名称 *</label>
-                                <input type="text" id="discovery-rule-name" placeholder="如：核心网段 SNMP 发现">
+                                <input type="text" id="discovery-rule-name" data-i18n-placeholder="placeholder_rule_name" placeholder="如：核心网段 SNMP 发现">
                             </div>
                             <div class="form-row">
                                 <label>IP 范围 *</label>
-                                <textarea id="discovery-rule-ip-range" rows="4" placeholder="支持多行，每行一个范围：&#10;192.168.1.0/24&#10;192.168.2.1-192.168.2.50&#10;192.168.3.10"></textarea>
+                                <textarea id="discovery-rule-ip-range" rows="4" data-i18n-placeholder="placeholder_ip_range" placeholder="支持多行，每行一个范围：&#10;192.168.1.0/24&#10;192.168.2.1-192.168.2.50&#10;192.168.3.10"></textarea>
                                 <span class="form-hint">可填写 CIDR、起止 IP 段或单个 IP，多行都会参与扫描。</span>
                             </div>
                             <div class="form-row">
                                 <label>SNMP Community</label>
-                                <input type="text" id="discovery-rule-community" placeholder="留空使用全局设置">
+                                <input type="text" id="discovery-rule-community" data-i18n-placeholder="placeholder_snmp_community_override" placeholder="留空使用全局设置">
                             </div>
                             <div class="form-row">
                                 <label>主机名 OID</label>
-                                <input type="text" id="discovery-rule-hostname-oid" placeholder="默认 1.3.6.1.2.1.1.5.0">
+                                <input type="text" id="discovery-rule-hostname-oid" data-i18n-placeholder="placeholder_hostname_oid" placeholder="默认 1.3.6.1.2.1.1.5.0">
                             </div>
                             <div class="form-row">
                                 <label>设备类型 OID（可选）</label>
-                                <input type="text" id="discovery-rule-type-oid" placeholder="如 sysObjectID 或厂商自定义 OID">
+                                <input type="text" id="discovery-rule-type-oid" data-i18n-placeholder="placeholder_type_oid" placeholder="如 sysObjectID 或厂商自定义 OID">
                                 <span class="form-hint">可用于根据 SNMP 返回值映射到设备类型，留空则默认使用 Cisco（可后续手工修改）。</span>
                             </div>
                             <div class="form-row">
                                 <label>自动加入分组（可选）</label>
-                                <input type="text" id="discovery-rule-group" placeholder="如：核心、汇聚、接入" list="discovery-rule-group-datalist">
+                                <input type="text" id="discovery-rule-group" data-i18n-placeholder="placeholder_auto_group" placeholder="如：核心、汇聚、接入" list="discovery-rule-group-datalist">
                                 <datalist id="discovery-rule-group-datalist"></datalist>
                             </div>
                         </div>
@@ -763,45 +763,42 @@
 
                 <!-- 数据备份与恢复 -->
                 <section class="settings-section" id="settings-section-db-backup">
-                    <h3 class="settings-subtitle">数据备份与恢复</h3>
-                    <p class="form-hint">备份或恢复系统数据库（设备、设置、用户等）。恢复后需重启服务方可生效。</p>
+                    <h3 class="settings-subtitle" data-i18n="section_db_backup">数据备份与恢复</h3>
+                    <p class="form-hint" data-i18n="hint_db_backup">备份或恢复系统数据库（设备、设置、用户等）。恢复后需重启服务方可生效。</p>
                     <div class="form-row">
-                        <label>数据库备份</label>
+                        <label data-i18n="label_db_backup">数据库备份</label>
                         <div class="form-row-inline">
-                            <button type="button" class="btn btn-secondary" id="btn-db-backup">备份数据库</button>
-                            <span class="form-hint" style="margin-left:0.5rem;">下载当前数据库文件</span>
+                            <button type="button" class="btn btn-secondary" id="btn-db-backup" data-i18n="btn_db_backup">备份数据库</button>
+                            <span class="form-hint" style="margin-left:0.5rem;" data-i18n="hint_db_backup_download">下载当前数据库文件</span>
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>数据库恢复</label>
+                        <label data-i18n="label_db_restore">数据库恢复</label>
                         <div class="form-row-inline settings-db-restore-row">
                             <input type="file" id="db-restore-file" accept=".db,.sqlite,.sqlite3">
-                            <button type="button" class="btn btn-secondary" id="btn-db-restore">恢复数据库</button>
+                            <button type="button" class="btn btn-secondary" id="btn-db-restore" data-i18n="btn_db_restore">恢复数据库</button>
                         </div>
-                        <span class="form-hint">选择之前备份的 .db 文件并点击「恢复数据库」，当前数据库会先备份为 .bak 文件。</span>
+                        <span class="form-hint" data-i18n="hint_db_restore">选择之前备份的 .db 文件并点击「恢复数据库」，当前数据库会先备份为 .bak 文件。</span>
                     </div>
                 </section>
 
                 <!-- 设备类型管理 -->
                 <section class="settings-section" id="settings-section-device-types">
-                    <h3 class="settings-subtitle">设备类型管理</h3>
-                    <p class="form-hint">
-                        在此维护可用的设备类型（厂商/型号）。前端设备列表与备份逻辑都会基于这里的配置来决定
-                        可选类型以及对应的备份命令。默认已内置 Cisco / Juniper / Huawei / H3C / RouterOS。
-                    </p>
+                    <h3 class="settings-subtitle" data-i18n="section_device_types">设备类型管理</h3>
+                    <p class="form-hint" data-i18n="hint_device_types">在此维护可用的设备类型（厂商/型号）。前端设备列表与备份逻辑都会基于这里的配置来决定可选类型以及对应的备份命令。默认已内置 Cisco / Juniper / Huawei / H3C / RouterOS。</p>
                     <div class="user-list-toolbar">
-                        <button type="button" class="btn btn-primary btn-sm" id="btn-device-type-new">+ 新增类型</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="btn-device-type-new" data-i18n="btn_new_type">+ 新增类型</button>
                     </div>
                     <div class="table-wrapper">
                         <table class="table" id="device-type-table">
                             <thead>
                                 <tr>
-                                    <th>类型代码</th>
-                                    <th>显示名称</th>
-                                    <th>驱动类型</th>
-                                    <th>启用</th>
-                                    <th>排序</th>
-                                    <th style="width: 140px;">操作</th>
+                                    <th data-i18n="th_type_code">类型代码</th>
+                                    <th data-i18n="th_display_name">显示名称</th>
+                                    <th data-i18n="th_driver_type">驱动类型</th>
+                                    <th data-i18n="th_enabled">启用</th>
+                                    <th data-i18n="th_sort">排序</th>
+                                    <th style="width: 140px;" data-i18n="th_actions">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="device-type-list">
@@ -811,125 +808,125 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="hint" id="device-type-hint">默认内置常见网络设备类型，你也可以在此补充其他厂商。</p>
+                    <p class="hint" id="device-type-hint" data-i18n="hint_device_type">默认内置常见网络设备类型，你也可以在此补充其他厂商。</p>
                 </section>
 
                 <!-- 备份设置 (含单台超时/线程数/SSH端口/失败Webhook) -->
                 <section class="settings-section" id="settings-section-backup">
-                    <h3 class="settings-subtitle">备份设置</h3>
+                    <h3 class="settings-subtitle" data-i18n="settings_backup">备份设置</h3>
                     <div class="form-row">
-                        <label>自动备份频率</label>
+                        <label data-i18n="label_backup_freq">自动备份频率</label>
                             <select id="setting-backup-frequency">
-                            <option value="none">手动执行</option>
-                            <option value="hourly">每小时（整点）</option>
-                            <option value="twice_daily">每12小时（0点和12点）</option>
-                            <option value="daily">每天凌晨02:00</option>
-                            <option value="weekly">每周日凌晨02:00</option>
-                            <option value="custom">自定义（高级）</option>
+                            <option value="none" data-i18n="freq_manual">手动执行</option>
+                            <option value="hourly" data-i18n="freq_hourly">每小时（整点）</option>
+                            <option value="twice_daily" data-i18n="freq_twice_daily">每12小时（0点和12点）</option>
+                            <option value="daily" data-i18n="freq_daily">每天凌晨02:00</option>
+                            <option value="weekly" data-i18n="freq_weekly">每周日凌晨02:00</option>
+                            <option value="custom" data-i18n="freq_custom">自定义（高级）</option>
                         </select>
-                        <span class="form-hint">修改后需重启服务方可完全生效</span>
+                        <span class="form-hint" data-i18n="hint_backup_freq">修改后需重启服务方可完全生效</span>
                         <div class="form-row form-row-sub" id="setting-custom-cron-wrap" style="display:none">
-                            <label>Cron 表达式</label>
-                            <input type="text" id="setting-custom-cron" placeholder="如 0 2 * * * 表示每天 02:00">
+                            <label data-i18n="label_cron">Cron 表达式</label>
+                            <input type="text" id="setting-custom-cron" data-i18n-placeholder="placeholder_cron" placeholder="如 0 2 * * * 表示每天 02:00">
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>历史备份保留天数</label>
-                        <input type="number" id="setting-retention-days" min="0" max="3650" placeholder="0 表示不自动删除">
-                        <span class="form-hint">超过天数的备份文件将自动删除，0 表示不自动删除</span>
+                        <label data-i18n="label_retention_days">历史备份保留天数</label>
+                        <input type="number" id="setting-retention-days" min="0" max="3650" data-i18n-placeholder="placeholder_retention" placeholder="0 表示不自动删除">
+                        <span class="form-hint" data-i18n="hint_retention">超过天数的备份文件将自动删除，0 表示不自动删除</span>
                     </div>
                     <div class="form-row">
-                        <label>默认连接方式</label>
+                        <label data-i18n="label_default_connection">默认连接方式</label>
                         <select id="setting-default-connection-type">
-                            <option value="TELNET">Telnet</option>
-                            <option value="SSH">SSH</option>
+                            <option value="TELNET" data-i18n="conn_telnet">Telnet</option>
+                            <option value="SSH" data-i18n="conn_ssh">SSH</option>
                         </select>
                     </div>
                     <div class="form-row">
-                        <label>默认 SSH 端口</label>
-                        <input type="number" id="setting-ssh-port" min="1" max="65535" placeholder="22">
+                        <label data-i18n="label_ssh_port">默认 SSH 端口</label>
+                        <input type="number" id="setting-ssh-port" min="1" max="65535" data-i18n-placeholder="placeholder_ssh_port" placeholder="22">
                     </div>
                     <div class="form-row">
-                        <label>默认 Telnet 端口</label>
-                        <input type="number" id="setting-telnet-port" min="1" max="65535" placeholder="23">
+                        <label data-i18n="label_telnet_port">默认 Telnet 端口</label>
+                        <input type="number" id="setting-telnet-port" min="1" max="65535" data-i18n-placeholder="placeholder_telnet_port" placeholder="23">
                     </div>
                     <div class="form-row">
-                        <label>默认用户名</label>
-                        <input type="text" id="setting-username" placeholder="登录用户名（Telnet/SSH 共用）">
+                        <label data-i18n="label_default_username">默认用户名</label>
+                        <input type="text" id="setting-username" data-i18n-placeholder="placeholder_username" placeholder="登录用户名（Telnet/SSH 共用）">
                     </div>
                     <div class="form-row">
-                        <label>默认密码</label>
+                        <label data-i18n="label_default_password">默认密码</label>
                         <div class="input-with-eye">
-                            <input type="password" id="setting-password" placeholder="Telnet 密码">
-                            <button type="button" class="btn-eye" id="btn-toggle-password" title="显示/隐藏密码" aria-label="显示密码">👁</button>
+                            <input type="password" id="setting-password" data-i18n-placeholder="placeholder_password" placeholder="Telnet 密码">
+                            <button type="button" class="btn-eye" id="btn-toggle-password" data-i18n-title="title_show_password" title="显示/隐藏密码" aria-label="显示密码">👁</button>
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>单台备份超时（秒）</label>
-                        <input type="number" id="setting-backup-timeout" min="5" max="300" placeholder="如 30">
-                        <span class="form-hint">单台设备连接与执行超过该秒数视为失败</span>
+                        <label data-i18n="label_backup_timeout">单台备份超时（秒）</label>
+                        <input type="number" id="setting-backup-timeout" min="5" max="300" data-i18n-placeholder="placeholder_backup_timeout" placeholder="如 30">
+                        <span class="form-hint" data-i18n="hint_backup_timeout">单台设备连接与执行超过该秒数视为失败</span>
                     </div>
                     <div class="form-row">
-                        <label>配置输出等待时间（秒）</label>
-                        <input type="number" id="setting-backup-read-timeout" min="10" max="300" placeholder="如 30">
-                        <span class="form-hint">发备份命令后等待设备输出配置的最长时间，所有设备类型共用，超时即结束读取</span>
+                        <label data-i18n="label_read_timeout">配置输出等待时间（秒）</label>
+                        <input type="number" id="setting-backup-read-timeout" min="10" max="300" data-i18n-placeholder="placeholder_read_timeout" placeholder="如 30">
+                        <span class="form-hint" data-i18n="hint_read_timeout">发备份命令后等待设备输出配置的最长时间，所有设备类型共用，超时即结束读取</span>
                     </div>
                     <div class="form-row">
-                        <label>备份并发线程数</label>
-                        <input type="number" id="setting-backup-thread-num" min="1" max="50" placeholder="如 10">
+                        <label data-i18n="label_thread_num">备份并发线程数</label>
+                        <input type="number" id="setting-backup-thread-num" min="1" max="50" data-i18n-placeholder="placeholder_thread_num" placeholder="如 10">
                     </div>
                     <div class="form-row">
-                        <label>备份失败告警 Webhook URL</label>
+                        <label data-i18n="label_webhook">备份失败告警 Webhook URL</label>
                         <div class="form-row-inline" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-                            <input type="text" id="setting-backup-failure-webhook" placeholder="https://... 留空不告警" style="flex: 1; min-width: 200px;">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-webhook" title="发送一条测试告警以验证 Webhook 是否可达">测试</button>
+                            <input type="text" id="setting-backup-failure-webhook" data-i18n-placeholder="placeholder_webhook" placeholder="https://... 留空不告警" style="flex: 1; min-width: 200px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-webhook" data-i18n-title="title_test_webhook" data-i18n="btn_test" title="发送一条测试告警以验证 Webhook 是否可达">测试</button>
                         </div>
-                        <span class="form-hint">备份任务结束后若有失败设备，将 POST 到该 URL（失败自动重试 3 次）。已按 URL 自动适配：企业微信、钉钉、飞书、Slack、Discord、Microsoft Teams 等；其他 URL 发送通用 JSON。测试由 vConfig 所在服务器发起，请填服务器可访问的地址。</span>
+                        <span class="form-hint" data-i18n="hint_webhook">备份任务结束后若有失败设备，将 POST 到该 URL（失败自动重试 3 次）。已按 URL 自动适配：企业微信、钉钉、飞书、Slack、Discord、Microsoft Teams 等；其他 URL 发送通用 JSON。测试由 vConfig 所在服务器发起，请填服务器可访问的地址。</span>
                     </div>
                     <div class="form-row">
-                        <label>API Token（多个用英文逗号分隔）</label>
-                        <input type="password" id="setting-api-tokens" placeholder="留空则不启用 API 鉴权">
-                        <span class="form-hint">请求头携带 <code>Authorization: Bearer &lt;token&gt;</code> 时可免登录调用 API，拥有管理员权限。用于脚本、NMS 等集成。</span>
+                        <label data-i18n="label_api_tokens">API Token（多个用英文逗号分隔）</label>
+                        <input type="password" id="setting-api-tokens" data-i18n-placeholder="placeholder_api_tokens" placeholder="留空则不启用 API 鉴权">
+                        <span class="form-hint" data-i18n="hint_api_tokens">请求头携带 <code>Authorization: Bearer &lt;token&gt;</code> 时可免登录调用 API，拥有管理员权限。用于脚本、NMS 等集成。</span>
                     </div>
                 </section>
 
                 <!-- 认证设置 -->
                 <section class="settings-section" id="settings-section-auth">
-                    <h3 class="settings-subtitle">认证设置</h3>
+                    <h3 class="settings-subtitle" data-i18n="settings_auth">认证设置</h3>
                     <div class="form-row">
-                        <label class="form-label-inline">启用 LDAP 登录 <input type="checkbox" id="setting-ldap-enabled"></label>
-                        <span class="form-hint">开启后，在本地账号校验失败时会继续尝试 LDAP 认证</span>
+                        <label class="form-label-inline"><span data-i18n="label_ldap_enabled">启用 LDAP 登录</span> <input type="checkbox" id="setting-ldap-enabled"></label>
+                        <span class="form-hint" data-i18n="hint_ldap_enabled">开启后，在本地账号校验失败时会继续尝试 LDAP 认证</span>
                     </div>
                     <div class="form-row">
-                        <label>LDAP 服务器地址</label>
-                        <input type="text" id="setting-ldap-server" placeholder="如 ldap://192.168.1.10:389 或 ldaps://ldap.example.com:636">
+                        <label data-i18n="label_ldap_server">LDAP 服务器地址</label>
+                        <input type="text" id="setting-ldap-server" data-i18n-placeholder="placeholder_ldap_server" placeholder="如 ldap://192.168.1.10:389 或 ldaps://ldap.example.com:636">
                     </div>
                     <div class="form-row">
-                        <label>LDAP Base DN</label>
-                        <input type="text" id="setting-ldap-base-dn" placeholder="如 ou=People,dc=example,dc=com">
+                        <label data-i18n="label_ldap_base_dn">LDAP Base DN</label>
+                        <input type="text" id="setting-ldap-base-dn" data-i18n-placeholder="placeholder_ldap_base_dn" placeholder="如 ou=People,dc=example,dc=com">
                     </div>
                     <div class="form-row">
-                        <label>LDAP Bind DN（可选）</label>
-                        <input type="text" id="setting-ldap-bind-dn" placeholder="用于查询的账号 DN，留空则匿名绑定（若服务器支持）">
+                        <label data-i18n="label_ldap_bind_dn">LDAP Bind DN（可选）</label>
+                        <input type="text" id="setting-ldap-bind-dn" data-i18n-placeholder="placeholder_ldap_bind_dn" placeholder="用于查询的账号 DN，留空则匿名绑定（若服务器支持）">
                     </div>
                     <div class="form-row">
-                        <label>LDAP Bind 密码（可选）</label>
+                        <label data-i18n="label_ldap_bind_password">LDAP Bind 密码（可选）</label>
                         <div class="input-with-eye">
-                            <input type="password" id="setting-ldap-bind-password" placeholder="Bind DN 对应的密码">
-                            <button type="button" class="btn-eye" id="btn-toggle-ldap-bind-password" title="显示/隐藏密码" aria-label="显示密码">👁</button>
+                            <input type="password" id="setting-ldap-bind-password" data-i18n-placeholder="placeholder_ldap_bind_password" placeholder="Bind DN 对应的密码">
+                            <button type="button" class="btn-eye" id="btn-toggle-ldap-bind-password" data-i18n-title="title_show_password" title="显示/隐藏密码" aria-label="显示密码">👁</button>
                         </div>
                     </div>
                     <div class="form-row">
-                        <label>LDAP 用户过滤器</label>
-                        <input type="text" id="setting-ldap-user-filter" placeholder="如 (uid={username}) 或 (sAMAccountName={username})">
-                        <span class="form-hint">{username} 会被替换为登录时输入的用户名</span>
+                        <label data-i18n="label_ldap_user_filter">LDAP 用户过滤器</label>
+                        <input type="text" id="setting-ldap-user-filter" data-i18n-placeholder="placeholder_ldap_user_filter" placeholder="如 (uid={username}) 或 (sAMAccountName={username})">
+                        <span class="form-hint" data-i18n="hint_ldap_filter">{username} 会被替换为登录时输入的用户名</span>
                     </div>
                     <div class="form-row">
-                        <label>测试 LDAP 登录</label>
+                        <label data-i18n="label_test_ldap">测试 LDAP 登录</label>
                         <div class="ldap-test-row">
-                            <input type="text" id="ldap-test-username" placeholder="测试用户名，如 alice">
-                            <input type="password" id="ldap-test-password" placeholder="测试密码">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-ldap">测试</button>
+                            <input type="text" id="ldap-test-username" data-i18n-placeholder="placeholder_ldap_test_user" placeholder="测试用户名，如 alice">
+                            <input type="password" id="ldap-test-password" data-i18n-placeholder="placeholder_ldap_test_pass" placeholder="测试密码">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-ldap" data-i18n="btn_test">测试</button>
                         </div>
                         <span class="form-hint" id="ldap-test-result"></span>
                     </div>
@@ -937,27 +934,27 @@
 
                 <!-- 用户管理 -->
                 <section class="settings-section" id="settings-section-users">
-                    <h3 class="settings-subtitle" style="margin: 0 0 0.75rem 0;">用户管理</h3>
-                    <p class="form-hint">
+                    <h3 class="settings-subtitle" style="margin: 0 0 0.75rem 0;" data-i18n="settings_users">用户管理</h3>
+                    <p class="form-hint" data-i18n="hint_users">
                         当前版本会自动记录所有成功登录过的用户，你可以在此查看账号来源并调整其角色（管理员 / 运维用户 / 只读用户）以及启用状态。
                         你也可以在此新建、复制和删除本地账号（仅管理员账号可以修改用户信息）。
                     </p>
                     <div class="user-list-toolbar">
-                        <button type="button" class="btn btn-primary btn-sm" id="btn-user-new">+ 创建用户</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="btn-user-new" data-i18n="btn_create_user">+ 创建用户</button>
                     </div>
                     <div class="table-wrapper">
                         <table class="table" id="user-table">
                             <thead>
                                 <tr>
-                                    <th>用户名</th>
-                                    <th>显示名</th>
-                                    <th>邮箱</th>
-                                    <th>手机</th>
-                                    <th>来源</th>
-                                    <th>角色</th>
-                                    <th>状态</th>
-                                    <th>创建时间</th>
-                                    <th style="width: 120px;">操作</th>
+                                    <th data-i18n="th_username">用户名</th>
+                                    <th data-i18n="th_display_name">显示名</th>
+                                    <th data-i18n="th_email">邮箱</th>
+                                    <th data-i18n="th_phone">手机</th>
+                                    <th data-i18n="th_source">来源</th>
+                                    <th data-i18n="th_role">角色</th>
+                                    <th data-i18n="th_status">状态</th>
+                                    <th data-i18n="th_created">创建时间</th>
+                                    <th style="width: 120px;" data-i18n="th_actions">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="user-list">
@@ -1288,7 +1285,7 @@
         <p id="modal-batch-delete-msg" class="hint">确定删除选中的设备？</p>
         <div class="form-row">
             <label>请输入「删除」以确认</label>
-            <input type="text" id="batch-delete-confirm-input" placeholder="删除" autocomplete="off">
+            <input type="text" id="batch-delete-confirm-input" data-i18n-placeholder="common_delete" placeholder="删除" autocomplete="off">
         </div>
         <div class="modal-actions">
             <button type="button" class="btn btn-secondary" id="btn-batch-delete-cancel">取消</button>
