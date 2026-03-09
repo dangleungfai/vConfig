@@ -492,12 +492,16 @@ def run_backup_task(
         os.makedirs(store_dir, exist_ok=True)
         store_path = os.path.join(store_dir, f"{hostname}_{suffix}.txt")
 
-        # 包一层回调，用于记录最近一次状态，以便决定是否需要尝试备用方式
-        last_status = {'status': None}
+        # 包一层回调：未开启 fallback 时每次尝试都上报；开启 fallback 时只记录最后一次结果，最后只上报一次（成功一次即算成功，仅都失败才算失败）
+        last_result = {'status': None, 'message': None, 'duration': None, 'config_path': None}
 
         def _cb(ip2, hostname2, dev_type2, status, message, duration, config_path):
-            last_status['status'] = status
-            log_callback(ip2, hostname2, dev_type2, status, message, duration, config_path)
+            last_result['status'] = status
+            last_result['message'] = message
+            last_result['duration'] = duration
+            last_result['config_path'] = config_path
+            if not fallback_to_second:
+                log_callback(ip2, hostname2, dev_type2, status, message, duration, config_path)
 
         def _do_with_conn(current_conn_type: str):
             if current_conn_type == "SSH":
@@ -624,14 +628,17 @@ def run_backup_task(
             attempts.append(secondary)
 
         for idx, ct in enumerate(attempts):
-            last_status['status'] = None
+            last_result['status'] = None
             _do_with_conn(ct)
             # 未开启回退或已成功，则不再继续尝试
             if not fallback_to_second:
                 break
-            if last_status['status'] == "OK":
+            if last_result['status'] == "OK":
                 break
 
+        # 开启 fallback 时只按最终结果上报一次，便于告警：任意一种连接方式成功即算成功，仅都失败才发备份失败告警
+        if fallback_to_second and last_result['status'] is not None:
+            log_callback(ip, hostname, dev_type, last_result['status'], last_result.get('message'), last_result.get('duration'), last_result.get('config_path'))
 
     for item in devices:
         do_one(item)
