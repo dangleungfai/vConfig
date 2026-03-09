@@ -1279,7 +1279,7 @@ a:hover { color: var(--primary-hover); }
 }
 .alert-rule-row label span {
     position: relative;
-    top: -10px;
+    top: -5px;
 }
 .form-row label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; color: var(--text-muted); }
 .form-row input, .form-row select {
