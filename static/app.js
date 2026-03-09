@@ -305,6 +305,8 @@ function showTab(name) {
             loadUsers();
         } else if (savedSection === 'device-types') {
             loadDeviceTypes(false);
+        } else if (savedSection === 'alerts') {
+            loadAlertLogs();
         }
     }
 }
@@ -4010,8 +4012,29 @@ async function loadSettings() {
     if (sshPortEl) sshPortEl.value = pick('ssh_port', d.ssh_port ?? '22');
     const telnetPortEl = document.getElementById('setting-telnet-port');
     if (telnetPortEl) telnetPortEl.value = pick('telnet_port', d.telnet_port ?? '23');
-    const webhookEl = document.getElementById('setting-backup-failure-webhook');
-    if (webhookEl) webhookEl.value = pick('backup_failure_webhook', d.backup_failure_webhook || '');
+    const webhookEl = document.getElementById('setting-alert-webhook');
+    if (webhookEl) webhookEl.value = pick('alert_webhook_url', d.alert_webhook_url || '');
+    // 告警设置
+    const alertFields = [
+        ['setting-alert-smtp-host', 'alert_smtp_host'],
+        ['setting-alert-smtp-port', 'alert_smtp_port', '587'],
+        ['setting-alert-smtp-user', 'alert_smtp_user'],
+        ['setting-alert-smtp-password', 'alert_smtp_password'],
+        ['setting-alert-smtp-from', 'alert_smtp_from'],
+        ['setting-alert-smtp-tls', 'alert_smtp_use_tls', '1'],
+        ['setting-alert-email-to', 'alert_email_to'],
+        ['setting-alert-backup-fail-email', 'alert_on_backup_fail_email', '0'],
+        ['setting-alert-backup-fail-webhook', 'alert_on_backup_fail_webhook', '1'],
+        ['setting-alert-discovery-email', 'alert_on_discovery_new_email', '0'],
+        ['setting-alert-discovery-webhook', 'alert_on_discovery_new_webhook', '0'],
+    ];
+    alertFields.forEach(([id, key, defVal]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const v = pick(key, d[key] ?? (defVal || ''));
+        if (el.type === 'checkbox') el.checked = (v === '1' || v === true);
+        else el.value = v || '';
+    });
     const apiTokensEl = document.getElementById('setting-api-tokens');
     if (apiTokensEl) apiTokensEl.value = pick('api_tokens', d.api_tokens || '');
     const ldapEnabledEl = document.getElementById('setting-ldap-enabled');
@@ -4145,7 +4168,7 @@ async function loadSettings() {
             'setting-backup-thread-num',
             'setting-ssh-port',
             'setting-telnet-port',
-            'setting-backup-failure-webhook',
+            'setting-alert-webhook', 'setting-alert-smtp-host', 'setting-alert-smtp-port', 'setting-alert-smtp-user', 'setting-alert-smtp-password', 'setting-alert-smtp-from', 'setting-alert-smtp-tls', 'setting-alert-email-to', 'setting-alert-backup-fail-email', 'setting-alert-backup-fail-webhook', 'setting-alert-discovery-email', 'setting-alert-discovery-webhook',
             'setting-api-tokens',
             'setting-ldap-enabled',
             'setting-ldap-server',
@@ -4186,6 +4209,12 @@ async function loadSettings() {
         });
         const testBtn = document.getElementById('btn-test-ldap');
         if (testBtn) testBtn.disabled = true;
+        const btnTestEmail = document.getElementById('btn-test-email');
+        if (btnTestEmail) btnTestEmail.disabled = true;
+        const btnTestWebhook = document.getElementById('btn-test-webhook');
+        if (btnTestWebhook) btnTestWebhook.disabled = true;
+        const btnRefreshAlertLogs = document.getElementById('btn-refresh-alert-logs');
+        if (btnRefreshAlertLogs) btnRefreshAlertLogs.disabled = true;
         // 供 discovery/users/device-types 子模块判断是否可编辑
         try { window.__canEditSettings = false; } catch (e) {}
     } else {
@@ -4294,7 +4323,18 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             backup_thread_num: parseInt(document.getElementById('setting-backup-thread-num')?.value, 10) || 10,
             ssh_port: parseInt(document.getElementById('setting-ssh-port')?.value, 10) || 22,
             telnet_port: parseInt(document.getElementById('setting-telnet-port')?.value, 10) || 23,
-            backup_failure_webhook: (document.getElementById('setting-backup-failure-webhook')?.value || '').trim(),
+            alert_webhook_url: (document.getElementById('setting-alert-webhook')?.value || '').trim(),
+        alert_smtp_host: (document.getElementById('setting-alert-smtp-host')?.value || '').trim(),
+        alert_smtp_port: parseInt(document.getElementById('setting-alert-smtp-port')?.value, 10) || 587,
+        alert_smtp_user: (document.getElementById('setting-alert-smtp-user')?.value || '').trim(),
+        alert_smtp_password: (document.getElementById('setting-alert-smtp-password')?.value || '').trim(),
+        alert_smtp_from: (document.getElementById('setting-alert-smtp-from')?.value || '').trim(),
+        alert_smtp_use_tls: document.getElementById('setting-alert-smtp-tls')?.checked ? '1' : '0',
+        alert_email_to: (document.getElementById('setting-alert-email-to')?.value || '').trim(),
+        alert_on_backup_fail_email: document.getElementById('setting-alert-backup-fail-email')?.checked ? '1' : '0',
+        alert_on_backup_fail_webhook: document.getElementById('setting-alert-backup-fail-webhook')?.checked ? '1' : '0',
+        alert_on_discovery_new_email: document.getElementById('setting-alert-discovery-email')?.checked ? '1' : '0',
+        alert_on_discovery_new_webhook: document.getElementById('setting-alert-discovery-webhook')?.checked ? '1' : '0',
             api_tokens: (document.getElementById('setting-api-tokens')?.value || '').trim(),
             // 自动发现 / SNMP 全局设置
             snmp_version: document.getElementById('setting-snmp-version')?.value || '2c',
@@ -4572,6 +4612,8 @@ document.querySelectorAll('.settings-nav-item')?.forEach(btn => {
             loadUsers();
         } else if (name === 'device-types') {
             loadDeviceTypes(false);
+        } else if (name === 'alerts') {
+            loadAlertLogs();
         }
     });
 });
@@ -4611,9 +4653,107 @@ document.getElementById('btn-test-ldap')?.addEventListener('click', async () => 
     }
 });
 
-// 测试备份失败告警 Webhook
+// 告警发送日志
+let alertLogPage = 1;
+let alertLogPerPage = 50;
+async function loadAlertLogs() {
+    const tbody = document.getElementById('alert-log-list');
+    const paginationEl = document.getElementById('alert-log-pagination');
+    const eventFilter = document.getElementById('alert-log-event-filter');
+    const channelFilter = document.getElementById('alert-log-channel-filter');
+    const perPageEl = document.getElementById('alert-log-per-page');
+    if (!tbody) return;
+    const event = (eventFilter?.value || '').trim();
+    const channel = (channelFilter?.value || '').trim();
+    const perPage = parseInt(perPageEl?.value || '50', 10) || 50;
+    alertLogPerPage = perPage;
+    const params = new URLSearchParams({ page: String(alertLogPage), per_page: String(perPage) });
+    if (event) params.set('event_type', event);
+    if (channel) params.set('channel', channel);
+    tbody.innerHTML = '<tr><td colspan="6">' + (window.t ? window.t('common_loading') : '加载中...') + '</td></tr>';
+    try {
+        const res = await fetch(`${API}/alert-logs?${params}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            tbody.innerHTML = '<tr><td colspan="6">' + (data.error || '加载失败') + '</td></tr>';
+            return;
+        }
+        const items = data.items || [];
+        const total = data.total || 0;
+        const page = data.page || 1;
+        alertLogPage = page;
+        const eventLabels = { backup_failure: '备份失败', discovery_new: '自动发现', test: '测试' };
+        const channelLabels = { email: '邮箱', webhook: 'Webhook' };
+        const statusLabels = { success: '成功', failed: '失败' };
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="6">' + (window.t ? window.t('common_none') : '暂无') + '</td></tr>';
+        } else {
+            tbody.innerHTML = items.map(a => {
+                const time = a.created_at ? (new Date(a.created_at).toLocaleString ? new Date(a.created_at).toLocaleString() : a.created_at) : '-';
+                const eventLabel = (window.t ? window.t('alerts_event_' + a.event_type) : null) || eventLabels[a.event_type] || a.event_type;
+                const channelLabel = (window.t ? window.t('alerts_channel_' + a.channel) : null) || channelLabels[a.channel] || a.channel;
+                const statusLabel = (window.t ? window.t('alerts_status_' + a.status) : null) || statusLabels[a.status] || a.status;
+                return '<tr><td>' + escapeHtml(time) + '</td><td>' + escapeHtml(eventLabel) + '</td><td>' + escapeHtml(channelLabel) + '</td><td>' + escapeHtml((a.recipient || '').substring(0, 60)) + '</td><td>' + escapeHtml(statusLabel) + '</td><td>' + escapeHtml((a.content_summary || a.subject || '').substring(0, 80)) + '</td></tr>';
+            }).join('');
+        }
+        // 分页
+        if (paginationEl) {
+            const totalPages = Math.max(1, Math.ceil(total / perPage));
+            let html = '';
+            if (page > 1) html += '<button type="button" class="btn btn-secondary btn-sm" data-page="' + (page - 1) + '">上一页</button> ';
+            html += '<span class="pagination-info">' + page + ' / ' + totalPages + '（共 ' + total + ' 条）</span>';
+            if (page < totalPages) html += ' <button type="button" class="btn btn-secondary btn-sm" data-page="' + (page + 1) + '">下一页</button>';
+            paginationEl.innerHTML = html;
+            paginationEl.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    alertLogPage = parseInt(btn.dataset.page, 10);
+                    loadAlertLogs();
+                });
+            });
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6">' + (e && e.message ? escapeHtml(e.message) : '请求失败') + '</td></tr>';
+    }
+}
+
+document.getElementById('btn-refresh-alert-logs')?.addEventListener('click', () => { loadAlertLogs(); });
+document.getElementById('alert-log-event-filter')?.addEventListener('change', () => { alertLogPage = 1; loadAlertLogs(); });
+document.getElementById('alert-log-channel-filter')?.addEventListener('change', () => { alertLogPage = 1; loadAlertLogs(); });
+document.getElementById('alert-log-per-page')?.addEventListener('change', () => { alertLogPage = 1; loadAlertLogs(); });
+
+// 发送测试邮件
+document.getElementById('btn-test-email')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-test-email');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API}/settings/test-email`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+            toast(data.message || (window.t ? window.t('toast_test_email_ok') : '测试邮件已发送'), 'success');
+            loadAlertLogs();
+        } else {
+            toast(data.error || (window.t ? window.t('toast_test_email_failed') : '发送失败，请检查 SMTP 与收件人配置'), 'error');
+        }
+    } catch (e) {
+        toast((window.t ? window.t('toast_request_failed') : '请求失败：') + (e && e.message ? e.message : ''), 'error');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// SMTP 密码显示/隐藏
+document.getElementById('btn-toggle-alert-smtp-password')?.addEventListener('click', function() {
+    const input = document.getElementById('setting-alert-smtp-password');
+    if (!input) return;
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    this.textContent = isPass ? '🙈' : '👁';
+});
+
+// 测试告警 Webhook（告警设置中的 URL）
 document.getElementById('btn-test-webhook')?.addEventListener('click', async () => {
-    const inputEl = document.getElementById('setting-backup-failure-webhook');
+    const inputEl = document.getElementById('setting-alert-webhook');
     const btn = document.getElementById('btn-test-webhook');
     if (!inputEl || !btn) return;
     const url = (inputEl.value || '').trim();
@@ -4631,6 +4771,7 @@ document.getElementById('btn-test-webhook')?.addEventListener('click', async () 
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
             toast(data.message || (window.t ? window.t('toast_test_sent') : '已发送测试消息'), 'success');
+            loadAlertLogs();
         } else {
             toast(data.error || (window.t ? window.t('toast_test_failed') : '测试失败，请检查 URL 是否可达'), 'error');
         }
@@ -4685,7 +4826,13 @@ function initSettingsDraftWatchers() {
         'setting-ldap-bind-password': 'ldap_bind_password',
         'setting-ldap-user-filter': 'ldap_user_filter',
         'setting-api-tokens': 'api_tokens',
-        'setting-backup-failure-webhook': 'backup_failure_webhook',
+        'setting-alert-webhook': 'alert_webhook_url',
+        'setting-alert-smtp-host': 'alert_smtp_host',
+        'setting-alert-smtp-port': 'alert_smtp_port',
+        'setting-alert-smtp-user': 'alert_smtp_user',
+        'setting-alert-smtp-password': 'alert_smtp_password',
+        'setting-alert-smtp-from': 'alert_smtp_from',
+        'setting-alert-email-to': 'alert_email_to',
         'setting-ssh-port': 'ssh_port',
         'setting-telnet-port': 'telnet_port',
         'setting-discovery-hostname-split': 'discovery_hostname_split_char',
@@ -4705,6 +4852,12 @@ function initSettingsDraftWatchers() {
         const h = () => writeSettingsDraft({ ldap_enabled: ldapEnabledEl.checked ? '1' : '0' });
         ldapEnabledEl.addEventListener('change', h);
     }
+    const alertTlsEl = document.getElementById('setting-alert-smtp-tls');
+    if (alertTlsEl) alertTlsEl.addEventListener('change', () => writeSettingsDraft({ alert_smtp_use_tls: alertTlsEl.checked ? '1' : '0' }));
+    [['setting-alert-backup-fail-email', 'alert_on_backup_fail_email'], ['setting-alert-backup-fail-webhook', 'alert_on_backup_fail_webhook'], ['setting-alert-discovery-email', 'alert_on_discovery_new_email'], ['setting-alert-discovery-webhook', 'alert_on_discovery_new_webhook']].forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => writeSettingsDraft({ [key]: el.checked ? '1' : '0' }));
+    });
     const freqEl = document.getElementById('setting-backup-frequency');
     const cronEl = document.getElementById('setting-custom-cron');
     if (freqEl) {

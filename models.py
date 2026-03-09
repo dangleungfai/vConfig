@@ -394,6 +394,33 @@ class AutoDiscoveryRunLog(db.Model):
         }
 
 
+class AlertLog(db.Model):
+    """告警发送日志：记录每次通过邮箱/Webhook 发送的告警。"""
+    __tablename__ = 'alert_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(64), nullable=False, index=True)  # backup_failure, discovery_new 等
+    channel = db.Column(db.String(16), nullable=False)  # email | webhook
+    recipient = db.Column(db.String(512), nullable=True)  # 邮箱地址或 Webhook URL（脱敏后可选）
+    subject = db.Column(db.String(256), nullable=True)   # 主题（邮箱）或空
+    content_summary = db.Column(db.String(1024), nullable=True)  # 内容摘要
+    status = db.Column(db.String(16), default='success')  # success | failed
+    error = db.Column(db.Text, nullable=True)            # 失败时的错误信息
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event_type': self.event_type,
+            'channel': self.channel,
+            'recipient': (self.recipient or '')[:80] + ('...' if len(self.recipient or '') > 80 else ''),
+            'subject': self.subject or '',
+            'content_summary': (self.content_summary or '')[:200],
+            'status': self.status or 'success',
+            'error': self.error or '',
+            'created_at': _isoformat_utc(self.created_at),
+        }
+
+
 class AutoDiscoveryJob(db.Model):
     """自动发现异步任务：用于跟踪某条规则最近一次手动执行的后台状态。"""
     __tablename__ = 'auto_discovery_jobs'

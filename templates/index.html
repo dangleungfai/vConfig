@@ -479,6 +479,7 @@
             <aside class="settings-sidebar">
                 <button type="button" class="settings-nav-item active" data-settings-section="general" data-i18n="settings_general">通用设置</button>
                 <button type="button" class="settings-nav-item" data-settings-section="backup" data-i18n="settings_backup">备份设置</button>
+                <button type="button" class="settings-nav-item" data-settings-section="alerts" data-i18n="settings_alerts">告警设置</button>
                 <button type="button" class="settings-nav-item" data-settings-section="discovery" data-i18n="settings_discovery">自动发现</button>
                 <button type="button" class="settings-nav-item" data-settings-section="device-types" data-i18n="settings_device_types">设备类型</button>
                 <button type="button" class="settings-nav-item" data-settings-section="auth" data-i18n="settings_auth">认证设置</button>
@@ -876,17 +877,121 @@
                         <input type="number" id="setting-backup-thread-num" min="1" max="50" data-i18n-placeholder="placeholder_thread_num" placeholder="如 10">
                     </div>
                     <div class="form-row">
-                        <label data-i18n="label_webhook">备份失败告警 Webhook URL</label>
-                        <div class="form-row-inline" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-                            <input type="text" id="setting-backup-failure-webhook" data-i18n-placeholder="placeholder_webhook" placeholder="https://... 留空不告警" style="flex: 1; min-width: 200px;">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-webhook" data-i18n-title="title_test_webhook" data-i18n="btn_test" title="发送一条测试告警以验证 Webhook 是否可达">测试</button>
-                        </div>
-                        <span class="form-hint" data-i18n="hint_webhook">备份任务结束后若有失败设备，将 POST 到该 URL（失败自动重试 3 次）。已按 URL 自动适配：企业微信、钉钉、飞书、Slack、Discord、Microsoft Teams 等；其他 URL 发送通用 JSON。测试由 vConfig 所在服务器发起，请填服务器可访问的地址。</span>
-                    </div>
-                    <div class="form-row">
                         <label data-i18n="label_api_tokens">API Token（多个用英文逗号分隔）</label>
                         <input type="password" id="setting-api-tokens" data-i18n-placeholder="placeholder_api_tokens" placeholder="留空则不启用 API 鉴权">
                         <span class="form-hint" data-i18n="hint_api_tokens">请求头携带 <code>Authorization: Bearer &lt;token&gt;</code> 时可免登录调用 API，拥有管理员权限。用于脚本、NMS 等集成。</span>
+                    </div>
+                </section>
+
+                <!-- 告警设置 -->
+                <section class="settings-section" id="settings-section-alerts">
+                    <h3 class="settings-subtitle" data-i18n="settings_alerts">告警设置</h3>
+                    <p class="form-hint" data-i18n="hint_alerts">配置邮箱和 Webhook，并选择哪些任务执行情况需要发送告警通知。</p>
+                    <h4 class="form-h4" data-i18n="alerts_email_title">邮箱配置</h4>
+                    <div class="form-row">
+                        <label data-i18n="alerts_smtp_host">SMTP 服务器</label>
+                        <input type="text" id="setting-alert-smtp-host" data-i18n-placeholder="alerts_smtp_host_ph" placeholder="如 smtp.qq.com">
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="alerts_smtp_port">SMTP 端口</label>
+                        <input type="number" id="setting-alert-smtp-port" min="1" max="65535" value="587" placeholder="587">
+                        <span class="form-hint" data-i18n="alerts_smtp_port_hint">常用：587(TLS)、465(SSL)、25(无加密)</span>
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="alerts_smtp_user">SMTP 用户名</label>
+                        <input type="text" id="setting-alert-smtp-user" placeholder="一般为邮箱地址">
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="alerts_smtp_password">SMTP 密码</label>
+                        <div class="input-with-eye">
+                            <input type="password" id="setting-alert-smtp-password" placeholder="邮箱授权码或密码">
+                            <button type="button" class="btn-eye" id="btn-toggle-alert-smtp-password" title="显示/隐藏">👁</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="alerts_smtp_from">发件人地址</label>
+                        <input type="text" id="setting-alert-smtp-from" placeholder="留空则使用 SMTP 用户名">
+                    </div>
+                    <div class="form-row">
+                        <label class="form-label-inline"><input type="checkbox" id="setting-alert-smtp-tls" checked> <span data-i18n="alerts_smtp_tls">启用 STARTTLS 加密</span></label>
+                    </div>
+                    <div class="form-row">
+                        <label data-i18n="alerts_email_to">告警收件人</label>
+                        <input type="text" id="setting-alert-email-to" data-i18n-placeholder="alerts_email_to_ph" placeholder="多个邮箱用英文逗号分隔">
+                        <span class="form-row-inline" style="margin-top:0.5rem;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-email" data-i18n="btn_test_email">发送测试邮件</button>
+                        </span>
+                    </div>
+                    <h4 class="form-h4" data-i18n="alerts_webhook_title">Webhook 配置</h4>
+                    <div class="form-row">
+                        <label data-i18n="alerts_webhook_url">Webhook URL</label>
+                        <div class="form-row-inline" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                            <input type="text" id="setting-alert-webhook" data-i18n-placeholder="placeholder_webhook" placeholder="https://... 留空不告警" style="flex: 1; min-width: 200px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-webhook" data-i18n="btn_test" title="发送测试">测试</button>
+                        </div>
+                        <span class="form-hint" data-i18n="hint_webhook">支持企业微信、钉钉、飞书、Slack、Discord、Microsoft Teams 等。</span>
+                    </div>
+                    <h4 class="form-h4" data-i18n="alerts_rules_title">告警规则</h4>
+                    <p class="form-hint" data-i18n="alerts_rules_hint">勾选后，当对应事件发生时将向已配置的邮箱/Webhook 发送告警。</p>
+                    <div class="form-row">
+                        <div class="alert-rules-grid">
+                            <div class="alert-rule-row">
+                                <span class="alert-rule-label" data-i18n="alerts_rule_backup_fail">备份失败</span>
+                                <label><input type="checkbox" id="setting-alert-backup-fail-email"> <span data-i18n="alerts_channel_email">邮箱</span></label>
+                                <label><input type="checkbox" id="setting-alert-backup-fail-webhook" checked> <span data-i18n="alerts_channel_webhook">Webhook</span></label>
+                            </div>
+                            <div class="alert-rule-row">
+                                <span class="alert-rule-label" data-i18n="alerts_rule_discovery_new">自动发现新增设备</span>
+                                <label><input type="checkbox" id="setting-alert-discovery-email"> <span data-i18n="alerts_channel_email">邮箱</span></label>
+                                <label><input type="checkbox" id="setting-alert-discovery-webhook"> <span data-i18n="alerts_channel_webhook">Webhook</span></label>
+                            </div>
+                        </div>
+                    </div>
+                    <h4 class="form-h4" data-i18n="alerts_log_title">发送日志</h4>
+                    <div class="form-row">
+                        <div class="devices-toolbar filters-bar">
+                            <select id="alert-log-event-filter">
+                                <option value="" data-i18n="alerts_filter_all_events">全部事件</option>
+                                <option value="backup_failure" data-i18n="alerts_event_backup_failure">备份失败</option>
+                                <option value="discovery_new" data-i18n="alerts_event_discovery_new">自动发现</option>
+                                <option value="test" data-i18n="alerts_event_test">测试</option>
+                            </select>
+                            <select id="alert-log-channel-filter">
+                                <option value="" data-i18n="alerts_filter_all_channels">全部渠道</option>
+                                <option value="email" data-i18n="alerts_channel_email">邮箱</option>
+                                <option value="webhook" data-i18n="alerts_channel_webhook">Webhook</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-alert-logs" data-i18n="btn_refresh">刷新</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="table table-alert-logs">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="alerts_log_time">时间</th>
+                                        <th data-i18n="alerts_log_event">事件</th>
+                                        <th data-i18n="alerts_log_channel">渠道</th>
+                                        <th data-i18n="alerts_log_recipient">收件人/URL</th>
+                                        <th data-i18n="alerts_log_status">状态</th>
+                                        <th data-i18n="alerts_log_summary">内容摘要</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alert-log-list">
+                                    <tr><td colspan="6" data-i18n="common_loading">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="devices-footer">
+                            <div class="pagination" id="alert-log-pagination"></div>
+                            <div class="per-page">
+                                <span data-i18n="per_page">每页</span>
+                                <select id="alert-log-per-page">
+                                    <option value="20">20</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                </select>
+                                <span data-i18n="per_page_rows">条</span>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

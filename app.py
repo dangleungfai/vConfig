@@ -22,7 +22,7 @@ from config import (
     BACKUP_THREAD_NUM, EXCLUDE_PATTERNS, DEFAULT_CONNECTION_TYPE, SSH_PORT,
     BACKUP_RETENTION_DAYS, DEFAULT_TIMEZONE, DATA_ROOT, CERTS_DIR,
 )
-from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, AutoDiscoveryJob, _isoformat_utc
+from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, AutoDiscoveryJob, AlertLog, _isoformat_utc
 from device_drivers import register_driver, load_custom_drivers
 from device_drivers.builtin import register_builtin_drivers
 from compliance import check_config
@@ -776,6 +776,97 @@ def _call_webhook_with_retry(url: str, body: bytes, max_retries: int = 3, timeou
     return False
 
 
+def _log_alert(event_type: str, channel: str, recipient: str, subject: str, content_summary: str, status: str, error: str = None):
+    """写入告警发送日志。"""
+    try:
+        with app.app_context():
+            _ensure_tables()
+            log = AlertLog(
+                event_type=event_type,
+                channel=channel,
+                recipient=(recipient or '')[:256],
+                subject=(subject or '')[:256],
+                content_summary=(content_summary or '')[:1024],
+                status=status,
+                error=(error or '')[:1024] if error else None,
+            )
+            db.session.add(log)
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _send_alert_email(to_list: list, subject: str, body: str) -> tuple:
+    """发送邮件告警。返回 (success: bool, error: str|None)。"""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    to_list = [t.strip() for t in to_list if t and str(t).strip()]
+    if not to_list:
+        return False, '未配置收件人'
+    host = (_get_setting('alert_smtp_host', '') or '').strip()
+    if not host:
+        return False, '未配置 SMTP 服务器'
+    port = int(_get_setting('alert_smtp_port', '587') or '587')
+    user = (_get_setting('alert_smtp_user', '') or '').strip()
+    password = (_get_setting('alert_smtp_password', '') or '').strip()
+    from_addr = (_get_setting('alert_smtp_from', '') or '').strip() or user
+    use_tls = (_get_setting('alert_smtp_use_tls', '1') or '1') == '1'
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = from_addr
+        msg['To'] = ', '.join(to_list)
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        with smtplib.SMTP(host, port, timeout=15) as smtp:
+            if use_tls:
+                smtp.starttls()
+            if user and password:
+                smtp.login(user, password)
+            smtp.sendmail(from_addr, to_list, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def _maybe_send_alerts(event_type: str, subject: str, body: str, extra: dict = None):
+    """根据告警设置，向邮箱/Webhook 发送告警并记录日志。event_type: backup_failure | discovery_new。"""
+    try:
+        with app.app_context():
+            _ensure_tables()
+            # 备份失败
+            if event_type == 'backup_failure':
+                send_email = (_get_setting('alert_on_backup_fail_email', '0') or '0') == '1'
+                send_webhook = (_get_setting('alert_on_backup_fail_webhook', '1') or '1') == '1'
+            # 自动发现新增
+            elif event_type == 'discovery_new':
+                send_email = (_get_setting('alert_on_discovery_new_email', '0') or '0') == '1'
+                send_webhook = (_get_setting('alert_on_discovery_new_webhook', '0') or '0') == '1'
+            else:
+                return
+            # 邮箱
+            if send_email:
+                to_str = (_get_setting('alert_email_to', '') or '').strip()
+                to_list = [x.strip() for x in to_str.split(',') if x.strip()]
+                if to_list:
+                    ok, err = _send_alert_email(to_list, subject, body)
+                    _log_alert(event_type, 'email', ','.join(to_list), subject, body[:200], 'success' if ok else 'failed', err)
+                    if not ok:
+                        app.logger.warning('告警邮件发送失败: %s', err)
+            # Webhook
+            if send_webhook:
+                url = (_get_setting('alert_webhook_url', '') or '').strip()
+                if url and url.startswith(('http://', 'https://')):
+                    webhook_body = _webhook_body_for_url(url, body, extra or {})
+                    ok = _call_webhook_with_retry(url, webhook_body, max_retries=3)
+                    _log_alert(event_type, 'webhook', url[:80], '', body[:200], 'success' if ok else 'failed', None if ok else '请求失败')
+    except Exception as e:
+        app.logger.warning('告警发送异常: %s', e)
+
+
 def _get_default_settings():
     """返回系统默认参数（与 config 及界面默认一致）"""
     return {
@@ -807,7 +898,18 @@ def _get_default_settings():
         'backup_thread_num': str(BACKUP_THREAD_NUM),
         'ssh_port': str(SSH_PORT),
         'telnet_port': '23',
-        'backup_failure_webhook': '',
+        'alert_smtp_host': '',
+        'alert_smtp_port': '587',
+        'alert_smtp_user': '',
+        'alert_smtp_password': '',
+        'alert_smtp_from': '',
+        'alert_smtp_use_tls': '1',
+        'alert_email_to': '',
+        'alert_on_backup_fail_email': '0',
+        'alert_on_backup_fail_webhook': '1',
+        'alert_on_discovery_new_email': '0',
+        'alert_on_discovery_new_webhook': '0',
+        'alert_webhook_url': '',
         'api_tokens': '',
         'device_groups': '',  # 预定义分组名，逗号分隔
         'ldap_enabled': '0',
@@ -2526,7 +2628,7 @@ def _execute_discovery_rule(rule_id, job_id=None):
         unique_by = (_get_setting('discovery_unique_by', 'hostname') or 'hostname').strip().lower()
         if unique_by not in ('hostname', 'ip'):
             unique_by = 'hostname'
-        for ip in _iter_ip_ranges(rule.ip_range, limit=256):
+        for ip in _iter_ip_ranges(rule.ip_range, limit=65536):
             scanned_ips.append(ip)
             # 唯一性按 IP 时：若设备列表中已有该 IP，跳过添加
             if unique_by == 'ip':
@@ -2665,6 +2767,33 @@ def run_discovery_rule(rule_id):
                     db.session.commit()
                 except Exception:
                     db.session.rollback()
+                # 自动发现新增设备告警
+                if job_obj.status == 'success' and (job_obj.added_count or 0) > 0:
+                    try:
+                        log_entry = AutoDiscoveryRunLog.query.get(job_obj.log_id) if job_obj.log_id else None
+                        added = []
+                        if log_entry and log_entry.added_json:
+                            added = json.loads(log_entry.added_json or '[]')
+                        rule_name = (rule.name or '').strip() or ('规则 #%d' % rule.id)
+                        lines = ['【vConfig 自动发现】规则「%s」完成：扫描 %d 个 IP，新增 %d 台设备。' % (
+                            rule_name, job_obj.scanned or 0, job_obj.added_count or 0,
+                        )]
+                        for d in added[:20]:
+                            lines.append('  - %s (%s) %s' % (
+                                d.get('hostname', ''), d.get('ip', ''), d.get('device_type', ''),
+                            ))
+                        if len(added) > 20:
+                            lines.append('  ... 等共 %d 台' % len(added))
+                        msg = '\n'.join(lines)
+                        _maybe_send_alerts('discovery_new', '【vConfig】自动发现新增设备', msg, {
+                            'event': 'discovery_new',
+                            'rule_id': rule.id,
+                            'rule_name': rule_name,
+                            'scanned': job_obj.scanned,
+                            'added_count': job_obj.added_count,
+                        })
+                    except Exception as ae:
+                        app.logger.warning('发现告警发送异常: %s', ae)
 
     t = threading.Thread(target=_run_job_async, args=(job.id, rule.id), daemon=True)
     t.start()
@@ -3033,25 +3162,22 @@ def _start_full_backup(run_type='manual', executor=''):
                     _save_config_changes_to_db()
                 except Exception as e:
                     app.logger.warning('保存配置变动到数据库失败: %s', e)
-                # 备份失败告警 Webhook（带重试与失败日志）
+                # 备份失败告警（邮箱 + Webhook，由告警设置控制）
                 if job_to_save.get('fail', 0) > 0:
-                    webhook = (_get_setting('backup_failure_webhook', '') or '').strip()
-                    if webhook and webhook.startswith(('http://', 'https://')):
-                        total = job_to_save.get('total', 0)
-                        ok = job_to_save.get('ok', 0)
-                        fail = job_to_save.get('fail', 0)
-                        msg = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
-                            job_to_save.get('id', ''), total, ok, fail
-                        )
-                        body = _webhook_body_for_url(webhook, msg, {
-                            'event': 'backup_failure',
-                            'job_id': job_to_save.get('id'),
-                            'total': total,
-                            'ok': ok,
-                            'fail': fail,
-                            'end_time': job_to_save.get('end_time'),
-                        })
-                        _call_webhook_with_retry(webhook, body, max_retries=3)
+                    total = job_to_save.get('total', 0)
+                    ok = job_to_save.get('ok', 0)
+                    fail = job_to_save.get('fail', 0)
+                    msg = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
+                        job_to_save.get('id', ''), total, ok, fail
+                    )
+                    _maybe_send_alerts('backup_failure', '【vConfig】备份失败告警', msg, {
+                        'event': 'backup_failure',
+                        'job_id': job_to_save.get('id'),
+                        'total': total,
+                        'ok': ok,
+                        'fail': fail,
+                        'end_time': job_to_save.get('end_time'),
+                    })
             _cleanup_old_backups()
 
     t = threading.Thread(target=_finish)
@@ -3226,27 +3352,24 @@ def run_backup_one(device_id):
                     job.status = 'completed'
                     job.end_time = datetime.utcnow().isoformat() + 'Z'
                     db.session.commit()
-                    # 单台备份失败时也触发 Webhook 告警（与全量备份失败保持一致风格）
+                    # 单台备份失败时触发告警
                     if status != 'OK':
-                        webhook = (_get_setting('backup_failure_webhook', '') or '').strip()
-                        if webhook and webhook.startswith(('http://', 'https://')):
-                            msg = '【vConfig 备份告警】单台备份失败：%s (%s, %s)。错误：%s' % (
-                                hostname or ip or '',
-                                ip or '',
-                                dev_type or '',
-                                message or '未知错误',
-                            )
-                            body = _webhook_body_for_url(webhook, msg, {
-                                'event': 'single_backup_failure',
-                                'job_id': job.id,
-                                'hostname': hostname,
-                                'ip': ip,
-                                'device_type': dev_type,
-                                'status': status,
-                                'error': message,
-                                'end_time': job.end_time,
-                            })
-                            _call_webhook_with_retry(webhook, body, max_retries=3)
+                        msg = '【vConfig 备份告警】单台备份失败：%s (%s, %s)。错误：%s' % (
+                            hostname or ip or '',
+                            ip or '',
+                            dev_type or '',
+                            message or '未知错误',
+                        )
+                        _maybe_send_alerts('backup_failure', '【vConfig】单台备份失败告警', msg, {
+                            'event': 'single_backup_failure',
+                            'job_id': job.id,
+                            'hostname': hostname,
+                            'ip': ip,
+                            'device_type': dev_type,
+                            'status': status,
+                            'error': message,
+                            'end_time': job.end_time,
+                        })
                 # 单台备份完成后计算「配置变动」并写入数据库
                 try:
                     _save_config_changes_to_db()
@@ -3978,7 +4101,18 @@ def get_settings():
         'backup_thread_num': _get_setting('backup_thread_num', str(BACKUP_THREAD_NUM)),
         'ssh_port': _get_setting('ssh_port', str(SSH_PORT)),
         'telnet_port': _get_setting('telnet_port', '23'),
-        'backup_failure_webhook': _get_setting('backup_failure_webhook', ''),
+        'alert_webhook_url': _get_setting('alert_webhook_url', ''),
+        'alert_smtp_host': _get_setting('alert_smtp_host', ''),
+        'alert_smtp_port': _get_setting('alert_smtp_port', '587'),
+        'alert_smtp_user': _get_setting('alert_smtp_user', ''),
+        'alert_smtp_password': _get_setting('alert_smtp_password', ''),
+        'alert_smtp_from': _get_setting('alert_smtp_from', ''),
+        'alert_smtp_use_tls': _get_setting('alert_smtp_use_tls', '1'),
+        'alert_email_to': _get_setting('alert_email_to', ''),
+        'alert_on_backup_fail_email': _get_setting('alert_on_backup_fail_email', '0'),
+        'alert_on_backup_fail_webhook': _get_setting('alert_on_backup_fail_webhook', '1'),
+        'alert_on_discovery_new_email': _get_setting('alert_on_discovery_new_email', '0'),
+        'alert_on_discovery_new_webhook': _get_setting('alert_on_discovery_new_webhook', '0'),
         'api_tokens': _get_setting('api_tokens', ''),
         # 自动发现设置
         'discovery_frequency': _get_setting('discovery_frequency', 'twice_daily'),
@@ -4395,8 +4529,23 @@ def update_settings():
             _set_setting('telnet_port', str(max(1, min(65535, n))))
         except (TypeError, ValueError):
             _set_setting('telnet_port', '23')
-    if 'backup_failure_webhook' in data:
-        _set_setting('backup_failure_webhook', (str(data.get('backup_failure_webhook') or '').strip())[:512])
+    if 'alert_webhook_url' in data:
+        _set_setting('alert_webhook_url', (str(data.get('alert_webhook_url') or '').strip())[:512])
+    # 告警设置
+    for key in ('alert_smtp_host', 'alert_smtp_user', 'alert_smtp_password', 'alert_smtp_from', 'alert_email_to'):
+        if key in data:
+            _set_setting(key, str(data.get(key) or '').strip()[:256])
+    if 'alert_smtp_port' in data:
+        try:
+            n = int(data.get('alert_smtp_port') or '587')
+            _set_setting('alert_smtp_port', str(max(1, min(65535, n))))
+        except (TypeError, ValueError):
+            _set_setting('alert_smtp_port', '587')
+    if 'alert_smtp_use_tls' in data:
+        _set_setting('alert_smtp_use_tls', '1' if data.get('alert_smtp_use_tls') in (True, 1, '1', 'true', 'on') else '0')
+    for key in ('alert_on_backup_fail_email', 'alert_on_backup_fail_webhook', 'alert_on_discovery_new_email', 'alert_on_discovery_new_webhook'):
+        if key in data:
+            _set_setting(key, '1' if data.get(key) in (True, 1, '1', 'true', 'on') else '0')
     if 'api_tokens' in data:
         _set_setting('api_tokens', (str(data.get('api_tokens') or '').strip())[:1024])
 
@@ -4483,7 +4632,7 @@ def test_webhook():
     if not _can_edit_settings():
         return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
     data = request.get_json(silent=True) or {}
-    url = (data.get('url') or '').strip() or (_get_setting('backup_failure_webhook', '') or '').strip()
+    url = (data.get('url') or '').strip() or (_get_setting('alert_webhook_url', '') or '').strip()
     if not url:
         return jsonify({'error': '请先填写 Webhook URL'}), 400
     if not url.startswith(('http://', 'https://')):
@@ -4501,10 +4650,12 @@ def test_webhook():
         resp = urllib.request.urlopen(req, timeout=10, context=ssl_ctx)
         status = resp.getcode() if hasattr(resp, 'getcode') else 200
         app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, status)
+        _log_alert('test', 'webhook', url[:80], None, 'Hello!!!', 'success', None)
         return jsonify({'ok': True, 'status': status, 'message': '已发送测试消息 Hello!!! 至 Webhook，HTTP %d' % status})
     except urllib.error.HTTPError as e:
         # 对方返回 4xx/5xx 仍视为 URL 可达、请求已送达
         app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, e.code)
+        _log_alert('test', 'webhook', url[:80], None, 'Hello!!!', 'success', None)
         return jsonify({'ok': True, 'status': e.code, 'message': '请求已送达，接收方返回 HTTP %d' % e.code})
     except urllib.error.URLError as e:
         reason = str(e.reason) if e.reason else str(e)
@@ -4519,6 +4670,45 @@ def test_webhook():
     except Exception as e:
         app.logger.warning('Webhook 测试请求异常: url=%s, err=%s', url, e)
         return jsonify({'error': '请求失败：%s' % (str(e) or '未知错误')}), 502
+
+
+@app.route('/api/settings/test-email', methods=['POST'])
+def test_email():
+    """发送一封测试告警邮件，用于验证 SMTP 配置。"""
+    if not _can_edit_settings():
+        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
+    to_str = (_get_setting('alert_email_to', '') or '').strip()
+    to_list = [x.strip() for x in to_str.split(',') if x.strip()]
+    if not to_list:
+        return jsonify({'error': '请先配置收件人（告警邮箱地址）'}), 400
+    ok, err = _send_alert_email(to_list, '【vConfig】告警测试', '这是一封来自 vConfig 的告警测试邮件。若收到此邮件，说明邮箱配置正确。')
+    if not ok:
+        return jsonify({'error': err or '邮件发送失败'}), 502
+    _log_alert('test', 'email', ','.join(to_list), '【vConfig】告警测试', '测试邮件', 'success', None)
+    return jsonify({'ok': True, 'message': '测试邮件已发送至 %s' % ', '.join(to_list)})
+
+
+@app.route('/api/alert-logs', methods=['GET'])
+def list_alert_logs():
+    """告警发送日志列表，支持分页与搜索。"""
+    _ensure_tables()
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = max(1, min(100, int(request.args.get('per_page', 50))))
+    event = (request.args.get('event_type') or '').strip()
+    channel = (request.args.get('channel') or '').strip()
+    q = AlertLog.query
+    if event:
+        q = q.filter(AlertLog.event_type == event)
+    if channel:
+        q = q.filter(AlertLog.channel == channel)
+    q = q.order_by(AlertLog.id.desc())
+    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'items': [a.to_dict() for a in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'per_page': per_page,
+    })
 
 
 def _validate_pem_cert(data: bytes) -> bool:
