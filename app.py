@@ -4814,23 +4814,22 @@ def update_ssl_cert():
 
 @app.route('/api/settings/restart', methods=['POST'])
 def restart_service():
-    """重启服务（向 Gunicorn 主进程发送 SIGHUP 触发优雅重载）"""
+    """重启服务：等同于执行 systemctl restart vconfig"""
     if not _can_edit_settings():
         return jsonify({'error': '当前账号无权重启服务，请使用管理员账号登录。'}), 403
 
     def _do_restart():
-        import time
-        time.sleep(1)
         try:
-            import signal
-            ppid = os.getppid()
-            os.kill(ppid, signal.SIGHUP)
+            import subprocess
+            # 等同于在服务器上执行：systemctl restart vconfig
+            subprocess.Popen(['systemctl', 'restart', 'vconfig'])
+            app.logger.info('systemctl restart vconfig 已触发')
         except Exception as e:
-            app.logger.warning('重启信号发送失败: %s', e)
+            app.logger.warning('执行 systemctl restart vconfig 失败: %s', e)
 
     threading.Thread(target=_do_restart, daemon=True).start()
-    _write_audit('restart_service', resource_type='settings', resource_id='', detail='user triggered restart')
-    return jsonify({'ok': True})
+    _write_audit('restart_service', resource_type='settings', resource_id='', detail='user triggered restart via systemctl')
+    return jsonify({'ok': True, 'message': '已调用 systemctl restart vconfig，服务即将重启。'})
 
 
 def _get_sqlite_db_path():

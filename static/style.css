@@ -1277,6 +1277,10 @@ a:hover { color: var(--primary-hover); }
     margin: 0;
     flex-shrink: 0;
 }
+.alert-rule-row label span {
+    position: relative;
+    top: -1px;
+}
 .form-row label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; color: var(--text-muted); }
 .form-row input, .form-row select {
     width: 100%;
