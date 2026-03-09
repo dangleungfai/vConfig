@@ -287,6 +287,9 @@ a:hover { color: var(--primary-hover); }
 .filters-bar input[type="text"] { width: 160px; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem; min-height: 2rem; box-sizing: border-box; }
 .filters-bar select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem; min-height: 2rem; box-sizing: border-box; }
 .toolbar-sep { color: var(--text-muted); margin: 0 0.25rem; }
+.alert-filters-bar { flex-wrap: nowrap; }
+.alert-filters-bar select { max-width: 180px; }
+.alert-filters-bar .btn { white-space: nowrap; }
 
 /* 仪表盘 - Apple 风格：大标题、留白、轻卡片 */
 .dashboard-header {
@@ -1266,8 +1269,8 @@ a:hover { color: var(--primary-hover); }
 .form-row-sub { margin-top: 0.5rem; margin-left: 0; padding-left: 0; }
 .alert-rules-grid { display: flex; flex-direction: column; gap: 0.75rem; }
 .alert-rule-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-.alert-rule-row .alert-rule-label { min-width: 140px; font-weight: 500; }
-.alert-rule-row label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; }
+.alert-rule-row .alert-rule-label { min-width: 140px; font-weight: 500; line-height: 1.4; }
+.alert-rule-row label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; line-height: 1.2; }
 .alert-rule-row input[type="checkbox"] {
     width: 14px;
     height: 14px;
