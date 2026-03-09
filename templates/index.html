@@ -844,6 +844,13 @@
                         </select>
                     </div>
                     <div class="form-row">
+                        <label class="form-label-inline">
+                            <input type="checkbox" id="setting-backup-conn-fallback">
+                            <span data-i18n="label_backup_conn_fallback">连接失败时自动尝试备用方式</span>
+                        </label>
+                        <span class="form-hint" data-i18n="hint_backup_conn_fallback">如默认 SSH 失败时自动改用 Telnet；默认 Telnet 失败时自动改用 SSH，若都失败则按失败记录。</span>
+                    </div>
+                    <div class="form-row">
                         <label data-i18n="label_ssh_port">默认 SSH 端口</label>
                         <input type="number" id="setting-ssh-port" min="1" max="65535" data-i18n-placeholder="placeholder_ssh_port" placeholder="22">
                     </div>

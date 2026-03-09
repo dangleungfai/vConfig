@@ -1268,6 +1268,12 @@ a:hover { color: var(--primary-hover); }
 .alert-rule-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .alert-rule-row .alert-rule-label { min-width: 140px; font-weight: 500; }
 .alert-rule-row label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; }
+.alert-rule-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+}
 .form-row label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; color: var(--text-muted); }
 .form-row input, .form-row select {
     width: 100%;

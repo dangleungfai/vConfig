@@ -453,6 +453,7 @@ def run_backup_task(
     read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
+    fallback_to_second: bool = False,
 ) -> None:
     """
     devices: [(ip, hostname, dev_type), ...] 或含 (username, password, connection_type, ssh_port, telnet_port)
@@ -491,111 +492,146 @@ def run_backup_task(
         os.makedirs(store_dir, exist_ok=True)
         store_path = os.path.join(store_dir, f"{hostname}_{suffix}.txt")
 
-        if conn_type == "SSH":
-            _backup_via_ssh(ip, hostname, dev_type, dev_username, dev_password, store_path, log_callback, dev_ssh_port, timeout_seconds, read_timeout_seconds=read_timeout_seconds, app_context=app_context, type_configs=type_configs)
-            return
+        # 包一层回调，用于记录最近一次状态，以便决定是否需要尝试备用方式
+        last_status = {'status': None}
 
-        start = datetime.datetime.now()
-        try:
-            # 获取设备驱动（用于登录提示符）
-            cfg = None
-            if isinstance(type_configs, dict):
-                cfg = type_configs.get(dev_type) or type_configs.get((dev_type or '').upper())
-            driver = _get_device_driver(dev_type, cfg)
-            login_prompt = b"sername"
-            password_prompt = b"assword"
-            if driver:
-                login_prompt = driver.get_login_prompt().encode()
-                password_prompt = driver.get_password_prompt().encode()
-            
-            tn = telnetlib.Telnet(ip, dev_telnet_port, timeout=timeout_seconds)
-            tn.read_until(login_prompt, timeout=timeout_seconds)
-            _run_and_expect_fixed(tn, dev_username, password_prompt, timeout_seconds)
-            
-            # 使用驱动获取提示符列表
-            prompts = [rb".*#$", rb"^<.*>$", rb"^[\[].*\]>", rb".*> $"]
-            if driver:
-                prompts = [p.encode() if isinstance(p, str) else p for p in driver.get_prompts()]
-            
-            _run_and_expect_fixed(
-                tn, dev_password,
-                prompts,
-                timeout_seconds
-            )
+        def _cb(ip2, hostname2, dev_type2, status, message, duration, config_path):
+            last_status['status'] = status
+            log_callback(ip2, hostname2, dev_type2, status, message, duration, config_path)
 
-            # 获取设备驱动
-            driver = _get_device_driver(dev_type, cfg)
-            if not driver:
-                log_callback(ip, hostname, dev_type, "Fail", "Unknown device type or driver failed", None, None)
-                tn.close()
+        def _do_with_conn(current_conn_type: str):
+            if current_conn_type == "SSH":
+                _backup_via_ssh(
+                    ip, hostname, dev_type,
+                    dev_username, dev_password,
+                    store_path,
+                    _cb,
+                    dev_ssh_port,
+                    timeout_seconds,
+                    read_timeout_seconds=read_timeout_seconds,
+                    app_context=app_context,
+                    type_configs=type_configs,
+                )
                 return
-            
-            # 使用驱动获取初始化命令
-            init_commands = driver.get_init_commands()
-            for cmd in init_commands:
-                tn.write(cmd.encode() + b"\r\n")
-                time.sleep(0.3)
-                # 等待提示符（使用通用提示符列表）
-                prompts = driver.get_prompts()
-                if prompts:
-                    compiled_prompts = [re.compile(p.encode() if isinstance(p, str) else p) for p in prompts]
-                    tn.expect(compiled_prompts, timeout=3)
-            
-            # RouterOS：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success)
-            dev_type_upper = (dev_type or '').strip().upper()
-            if dev_type_upper in ('ROS', 'ROUTEROS'):
-                prompt_str = driver.get_prompt()
-                prompt_bytes = (prompt_str or 'output_success').encode()
-                try:
-                    tn.read_until(prompt_bytes, 3)
-                    tn.read_until(prompt_bytes, 3)
-                except Exception:
-                    pass
-            
-            # 使用驱动获取备份命令
-            backup_cmd = driver.get_backup_command()
-            tn.write(backup_cmd.encode() + b"\r\n")
-            
-            # 使用驱动获取提示符
-            prompt_str = driver.get_prompt()
-            prompt = prompt_str.encode() if prompt_str else b"#"
-            read_to = read_timeout_seconds if read_timeout_seconds is not None else BACKUP_READ_TIMEOUT_SECONDS
-            result = tn.read_until(prompt, max(read_to, timeout_seconds))
-            tn.close()
-            end = datetime.datetime.now()
-            duration = int((end - start).total_seconds())
-            content = result.decode('utf-8', errors='replace')
-            if prompt_str and (prompt_str.strip() == 'output_success') and ('output_success' in content):
-                content = content.split('output_success')[0].rstrip()
-            # H3C 只匹配 return，截断后保留末尾 "return" 行
-            if prompt_str and 'return' in prompt_str:
-                for end_marker in ('return\r\n', 'return\n'):
-                    idx = content.rfind(end_marker)
-                    if idx >= 0:
-                        content = content[:idx] + 'return\r\n'
-                        break
-            # 去掉末尾的提示符行（如 "> \r\n"），避免写入文件
-            elif prompt_str and ('>\n' in prompt_str or '>\r\n' in prompt_str or '> \r\n' in prompt_str or '> \n' in prompt_str):
-                for end_marker in ('> \r\n', '>\r\n', '> \n', '>\n'):
-                    idx = content.rfind(end_marker)
-                    if idx >= 0:
-                        content = content[:idx].rstrip()
-                        break
-            if dev_type_upper in ('ROS', 'ROUTEROS'):
-                content = _clean_routeros_backup_content(content)
-            with open(store_path, 'w') as f:
-                f.write(content)
-            # 回调: (ip, hostname, dev_type, status, message, duration, config_path)
-            log_callback(ip, hostname, dev_type, "OK", None, duration, store_path)
 
-        except socket.timeout:
-            log_callback(ip, hostname, dev_type, "Fail_Network", None, None, None)
-        except Exception as e:
-            err_msg = str(e)
-            if "Login" in err_msg or "assword" in err_msg or "incorrect" in err_msg.lower():
-                log_callback(ip, hostname, dev_type, "Fail_Login", err_msg, None, None)
-            else:
-                log_callback(ip, hostname, dev_type, "Fail", err_msg, None, None)
+            start = datetime.datetime.now()
+            try:
+                # 获取设备驱动（用于登录提示符）
+                cfg = None
+                if isinstance(type_configs, dict):
+                    cfg = type_configs.get(dev_type) or type_configs.get((dev_type or '').upper())
+                driver = _get_device_driver(dev_type, cfg)
+                login_prompt = b"sername"
+                password_prompt = b"assword"
+                if driver:
+                    login_prompt = driver.get_login_prompt().encode()
+                    password_prompt = driver.get_password_prompt().encode()
+
+                tn = telnetlib.Telnet(ip, dev_telnet_port, timeout=timeout_seconds)
+                tn.read_until(login_prompt, timeout=timeout_seconds)
+                _run_and_expect_fixed(tn, dev_username, password_prompt, timeout_seconds)
+
+                # 使用驱动获取提示符列表
+                prompts = [rb".*#$", rb"^<.*>$", rb"^[\[].*\]>", rb".*> $"]
+                if driver:
+                    prompts = [p.encode() if isinstance(p, str) else p for p in driver.get_prompts()]
+
+                _run_and_expect_fixed(
+                    tn, dev_password,
+                    prompts,
+                    timeout_seconds
+                )
+
+                # 获取设备驱动
+                driver = _get_device_driver(dev_type, cfg)
+                if not driver:
+                    _cb(ip, hostname, dev_type, "Fail", "Unknown device type or driver failed", None, None)
+                    tn.close()
+                    return
+
+                # 使用驱动获取初始化命令
+                init_commands = driver.get_init_commands()
+                for cmd in init_commands:
+                    tn.write(cmd.encode() + b"\r\n")
+                    time.sleep(0.3)
+                    # 等待提示符（使用通用提示符列表）
+                    prompts = driver.get_prompts()
+                    if prompts:
+                        compiled_prompts = [re.compile(p.encode() if isinstance(p, str) else p) for p in prompts]
+                        tn.expect(compiled_prompts, timeout=3)
+
+                # RouterOS：发备份命令前先两次短超时 read_until 清掉当前提示符，再发命令并 read_until(output_success)
+                dev_type_upper = (dev_type or '').strip().upper()
+                if dev_type_upper in ('ROS', 'ROUTEROS'):
+                    prompt_str = driver.get_prompt()
+                    prompt_bytes = (prompt_str or 'output_success').encode()
+                    try:
+                        tn.read_until(prompt_bytes, 3)
+                        tn.read_until(prompt_bytes, 3)
+                    except Exception:
+                        pass
+
+                # 使用驱动获取备份命令
+                backup_cmd = driver.get_backup_command()
+                tn.write(backup_cmd.encode() + b"\r\n")
+
+                # 使用驱动获取提示符
+                prompt_str = driver.get_prompt()
+                prompt = prompt_str.encode() if prompt_str else b"#"
+                read_to = read_timeout_seconds if read_timeout_seconds is not None else BACKUP_READ_TIMEOUT_SECONDS
+                result = tn.read_until(prompt, max(read_to, timeout_seconds))
+                tn.close()
+                end = datetime.datetime.now()
+                duration = int((end - start).total_seconds())
+                content = result.decode('utf-8', errors='replace')
+                if prompt_str and (prompt_str.strip() == 'output_success') and ('output_success' in content):
+                    content = content.split('output_success')[0].rstrip()
+                # H3C 只匹配 return，截断后保留末尾 "return" 行
+                if prompt_str and 'return' in prompt_str:
+                    for end_marker in ('return\r\n', 'return\n'):
+                        idx = content.rfind(end_marker)
+                        if idx >= 0:
+                            content = content[:idx] + 'return\r\n'
+                            break
+                # 去掉末尾的提示符行（如 "> \r\n"），避免写入文件
+                elif prompt_str and ('>\n' in prompt_str or '>\r\n' in prompt_str or '> \r\n' in prompt_str or '> \n' in prompt_str):
+                    for end_marker in ('> \r\n', '>\r\n', '> \n', '>\n'):
+                        idx = content.rfind(end_marker)
+                        if idx >= 0:
+                            content = content[:idx].rstrip()
+                            break
+                if dev_type_upper in ('ROS', 'ROUTEROS'):
+                    content = _clean_routeros_backup_content(content)
+                with open(store_path, 'w') as f:
+                    f.write(content)
+                # 回调: (ip, hostname, dev_type, status, message, duration, config_path)
+                _cb(ip, hostname, dev_type, "OK", None, duration, store_path)
+
+            except socket.timeout:
+                _cb(ip, hostname, dev_type, "Fail_Network", None, None, None)
+            except Exception as e:
+                err_msg = str(e)
+                if "Login" in err_msg or "assword" in err_msg or "incorrect" in err_msg.lower():
+                    _cb(ip, hostname, dev_type, "Fail_Login", err_msg, None, None)
+                else:
+                    _cb(ip, hostname, dev_type, "Fail", err_msg, None, None)
+
+        # 尝试顺序：先当前连接方式，若开启回退则再尝试备用方式
+        primary = conn_type
+        secondary = "SSH" if primary == "TELNET" else "TELNET"
+        attempts = [primary]
+        if fallback_to_second:
+            attempts.append(secondary)
+
+        for idx, ct in enumerate(attempts):
+            last_status['status'] = None
+            _do_with_conn(ct)
+            # 未开启回退或已成功，则不再继续尝试
+            if not fallback_to_second:
+                break
+            if last_status['status'] == "OK":
+                break
+
 
     for item in devices:
         do_one(item)
@@ -614,6 +650,7 @@ def run_single_backup(
     read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
+    fallback_to_second: bool = False,
 ) -> None:
     """单台设备备份（不应用排除规则）"""
     run_backup_task(
@@ -630,6 +667,7 @@ def run_single_backup(
         read_timeout_seconds=read_timeout_seconds,
         app_context=app_context,
         type_configs=type_configs,
+        fallback_to_second=fallback_to_second,
     )
 
 
@@ -714,6 +752,7 @@ def run_backup_async(
     read_timeout_seconds: Optional[int] = None,
     app_context=None,
     type_configs: Optional[dict] = None,
+    fallback_to_second: bool = False,
 ) -> None:
     """多线程异步执行备份"""
     import math
@@ -735,6 +774,7 @@ def run_backup_async(
                 "read_timeout_seconds": read_timeout_seconds,
                 "app_context": app_context,
                 "type_configs": type_configs,
+                "fallback_to_second": fallback_to_second,
             },
         )
         threads.append(t)

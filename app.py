@@ -896,6 +896,8 @@ def _get_default_settings():
         'backup_read_timeout_seconds': '30',
         # 备份并发线程数：默认 5
         'backup_thread_num': str(BACKUP_THREAD_NUM),
+        # 连接失败是否自动尝试备用方式（如默认 SSH 失败时再尝试 Telnet）
+        'backup_connection_fallback': '0',
         'ssh_port': str(SSH_PORT),
         'telnet_port': '23',
         'alert_smtp_host': '',
@@ -3035,6 +3037,7 @@ def _start_full_backup(run_type='manual', executor=''):
     except (TypeError, ValueError):
         backup_read_timeout = 30
     backup_read_timeout = max(10, min(300, backup_read_timeout))
+    fallback_flag = (_get_setting('backup_connection_fallback', '0') or '0') == '1'
 
     def _build_type_configs():
         """构建设备类型 -> 配置 的显性映射，供备份线程使用"""
@@ -3074,6 +3077,7 @@ def _start_full_backup(run_type='manual', executor=''):
                 read_timeout_seconds=backup_read_timeout,
                 app_context=None,
                 type_configs=type_configs,
+                fallback_to_second=fallback_flag,
             )
         except Exception as e:
             # 兜底：如果备份线程在开始前就异常退出，至少记录一条失败日志，避免任务看起来“什么都没发生”
@@ -3313,6 +3317,7 @@ def run_backup_one(device_id):
         _read_timeout = 30
     default_user = _get_setting('username', DEFAULT_USERNAME)
     default_pass = _get_setting('password', DEFAULT_PASSWORD)
+    fallback_flag = (_get_setting('backup_connection_fallback', '0') or '0') == '1'
 
     job_id = 'single_' + datetime.utcnow().strftime('%Y%m%d%H%M%S') + '_' + str(device_id)
     start_time = datetime.utcnow().isoformat() + 'Z'
@@ -3412,6 +3417,7 @@ def run_backup_one(device_id):
                 read_timeout_seconds=_read_timeout,
                 app_context=app.app_context(),
                 type_configs=type_configs,
+                fallback_to_second=fallback_flag,
             )
         except Exception as e:
             app.logger.warning('单台设备备份失败: %s', e)
@@ -4099,6 +4105,7 @@ def get_settings():
         'backup_timeout_seconds': _get_setting('backup_timeout_seconds', '30'),
         'backup_read_timeout_seconds': _get_setting('backup_read_timeout_seconds', '30'),
         'backup_thread_num': _get_setting('backup_thread_num', str(BACKUP_THREAD_NUM)),
+        'backup_connection_fallback': _get_setting('backup_connection_fallback', '0'),
         'ssh_port': _get_setting('ssh_port', str(SSH_PORT)),
         'telnet_port': _get_setting('telnet_port', '23'),
         'alert_webhook_url': _get_setting('alert_webhook_url', ''),
@@ -4429,6 +4436,11 @@ def update_settings():
     if data.get('default_connection_type') is not None:
         ct = str(data['default_connection_type']).strip().upper()
         _set_setting('default_connection_type', ct if ct in ('TELNET', 'SSH') else 'TELNET')
+    if 'backup_connection_fallback' in data:
+        _set_setting(
+            'backup_connection_fallback',
+            '1' if data.get('backup_connection_fallback') in (True, 1, '1', 'true', 'on') else '0'
+        )
     if data.get('system_name') is not None:
         # 系统名称允许用户自定义，做长度限制并提供合理默认值
         name = (str(data.get('system_name') or '').strip())[:100]

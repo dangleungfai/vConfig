@@ -3980,6 +3980,8 @@ async function loadSettings() {
     if (connEl) connEl.value = (pick('default_connection_type', d.default_connection_type || 'TELNET') || 'TELNET').toUpperCase();
     const retentionEl = document.getElementById('setting-retention-days');
     if (retentionEl) retentionEl.value = pick('backup_retention_days', d.backup_retention_days ?? '');
+    const connFallbackEl = document.getElementById('setting-backup-conn-fallback');
+    if (connFallbackEl) connFallbackEl.checked = (pick('backup_connection_fallback', d.backup_connection_fallback || '0') === '1');
     const footerEl = document.getElementById('setting-footer-text');
     if (footerEl) footerEl.value = pick('footer_text', d.footer_text || '');
     const sessionTimeoutEl = document.getElementById('setting-session-timeout');
@@ -4166,6 +4168,7 @@ async function loadSettings() {
             'setting-backup-timeout',
             'setting-backup-read-timeout',
             'setting-backup-thread-num',
+            'setting-backup-conn-fallback',
             'setting-ssh-port',
             'setting-telnet-port',
             'setting-alert-webhook', 'setting-alert-smtp-host', 'setting-alert-smtp-port', 'setting-alert-smtp-user', 'setting-alert-smtp-password', 'setting-alert-smtp-from', 'setting-alert-smtp-tls', 'setting-alert-email-to', 'setting-alert-backup-fail-email', 'setting-alert-backup-fail-webhook', 'setting-alert-discovery-email', 'setting-alert-discovery-webhook',
@@ -4321,6 +4324,7 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             backup_timeout_seconds: parseInt(document.getElementById('setting-backup-timeout')?.value, 10) || 30,
             backup_read_timeout_seconds: parseInt(document.getElementById('setting-backup-read-timeout')?.value, 10) || 30,
             backup_thread_num: parseInt(document.getElementById('setting-backup-thread-num')?.value, 10) || 10,
+            backup_connection_fallback: document.getElementById('setting-backup-conn-fallback')?.checked ? '1' : '0',
             ssh_port: parseInt(document.getElementById('setting-ssh-port')?.value, 10) || 22,
             telnet_port: parseInt(document.getElementById('setting-telnet-port')?.value, 10) || 23,
             alert_webhook_url: (document.getElementById('setting-alert-webhook')?.value || '').trim(),
@@ -4833,6 +4837,7 @@ function initSettingsDraftWatchers() {
         'setting-alert-smtp-password': 'alert_smtp_password',
         'setting-alert-smtp-from': 'alert_smtp_from',
         'setting-alert-email-to': 'alert_email_to',
+        'setting-backup-conn-fallback': 'backup_connection_fallback',
         'setting-ssh-port': 'ssh_port',
         'setting-telnet-port': 'telnet_port',
         'setting-discovery-hostname-split': 'discovery_hostname_split_char',
@@ -4851,6 +4856,11 @@ function initSettingsDraftWatchers() {
     if (ldapEnabledEl) {
         const h = () => writeSettingsDraft({ ldap_enabled: ldapEnabledEl.checked ? '1' : '0' });
         ldapEnabledEl.addEventListener('change', h);
+    }
+    const connFallbackEl = document.getElementById('setting-backup-conn-fallback');
+    if (connFallbackEl) {
+        const h = () => writeSettingsDraft({ backup_connection_fallback: connFallbackEl.checked ? '1' : '0' });
+        connFallbackEl.addEventListener('change', h);
     }
     const alertTlsEl = document.getElementById('setting-alert-smtp-tls');
     if (alertTlsEl) alertTlsEl.addEventListener('change', () => writeSettingsDraft({ alert_smtp_use_tls: alertTlsEl.checked ? '1' : '0' }));
