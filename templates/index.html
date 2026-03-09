@@ -924,10 +924,10 @@
                     </div>
                     <div class="form-row">
                         <label data-i18n="alerts_email_to">告警收件人</label>
-                        <input type="text" id="setting-alert-email-to" data-i18n-placeholder="alerts_email_to_ph" placeholder="多个邮箱用英文逗号分隔">
-                        <span class="form-row-inline" style="margin-top:0.5rem;">
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-email" data-i18n="btn_test_email">发送测试邮件</button>
-                        </span>
+                        <div class="form-row-inline" style="align-items: center; gap: 0.5rem;">
+                            <input type="text" id="setting-alert-email-to" data-i18n-placeholder="alerts_email_to_ph" placeholder="多个邮箱用英文逗号分隔" style="flex: 1; min-width: 200px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-test-email" data-i18n="btn_test_email">测试</button>
+                        </div>
                     </div>
                     <h4 class="form-h4" data-i18n="alerts_webhook_title">Webhook 配置</h4>
                     <div class="form-row">
