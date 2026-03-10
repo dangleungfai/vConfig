@@ -10,6 +10,7 @@ Environment="PATH={{INSTALL_DIR}}/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="FLASK_HTTPS=1"
 Environment="FLASK_HOST=0.0.0.0"
 Environment="FLASK_PORT={{PORT}}"
+Environment="DATABASE_URL={{DATABASE_URL}}"
 ExecStart={{INSTALL_DIR}}/venv/bin/python app.py
 Restart=always
 RestartSec=3

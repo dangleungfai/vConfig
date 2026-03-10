@@ -144,14 +144,14 @@ git clone git@github.com:dangleungfai/vConfig.git
 
 ### 3. 一键部署
 
-在代码目录下执行（先赋予脚本执行权限）：
+在代码目录下执行（先赋予脚本执行权限，默认会自动初始化本机 MariaDB）： 
 
 ```bash
 chmod a+x deploy.sh
 sudo ./deploy.sh
 ```
 
-脚本将自动完成：检查运行环境（若缺少关键依赖会给出明确提示并退出）；创建虚拟环境 `./venv` 并安装 `requirements.txt`；使用 **MariaDB** 初始化数据库并重置管理员密码；生成 HTTPS 自签名证书（存放于 `data/certs/`，如未安装 openssl 则回退为 HTTP 模式）；注册并启动 systemd 服务 `vconfig`；询问监听端口（root 默认 443，普通用户默认 8443）并输出访问 URL。
+脚本将自动完成：检查运行环境（若缺少关键依赖会给出明确提示并退出）；创建虚拟环境 `./venv` 并安装 `requirements.txt`；使用 **MariaDB** 初始化数据库并重置管理员密码；**自动为本机 MariaDB 设置（或确认）`root` 密码，并创建默认数据库 `vconfig`、账号 `vconfig`/`vconfig`（可在交互提示中自定义，直接回车使用默认值）**；生成 HTTPS 自签名证书（存放于 `data/certs/`，如未安装 openssl 则回退为 HTTP 模式）；注册并启动 systemd 服务 `vconfig`；询问监听端口（root 默认 443，普通用户默认 8443）并输出访问 URL。
 
 部署完成后，使用以下命令管理服务：
 
@@ -188,24 +188,23 @@ sudo systemctl restart vconfig  # 重启
 
 ---
 
-## 数据库：MariaDB 配置与迁移
+## 数据库：MariaDB 默认参数与迁移
 
-### 使用 MariaDB 作为唯一数据库
+### 默认数据库参数
 
-当前版本仅支持使用 **MariaDB/MySQL** 作为数据库，请在部署前准备好数据库实例与账号，并通过环境变量进行配置：
+当前版本仅支持使用 **MariaDB/MySQL** 作为数据库。执行 `deploy.sh` 时，脚本会以交互方式询问并自动初始化数据库，**直接回车即可使用以下默认值**：
 
-```bash
-export MARIADB_HOST=localhost         # MariaDB 主机
-export MARIADB_PORT=3306              # 端口
-export MARIADB_USER=vconfig           # 数据库用户名
-export MARIADB_PASSWORD=你的密码      # 数据库密码
-export MARIADB_DATABASE=vconfig       # 数据库名
-```
+- root 管理员密码：`root`
+- vConfig 数据库名：`vconfig`
+- vConfig 数据库用户名：`vconfig`
+- vConfig 数据库密码：`vconfig`
 
-应用启动时将按以下优先级确定数据库连接：
+脚本会尝试：
 
-1. 若设置了 `DATABASE_URL`，直接使用该连接串（如 `mysql+pymysql://user:pass@host:3306/dbname`）。
-2. 否则若设置了 `MARIADB_*`，则自动构建 MariaDB 连接串。
+- 为 `root@localhost` 设置（或确认）密码为你输入的值（默认 `root`）；
+- 创建数据库 `vconfig`（或你自定义的名称）；
+- 创建业务账号 `vconfig`/`vconfig`（或你自定义的账号/密码），并授予该库的全部权限；
+- 将这些参数写入 systemd 服务的 `DATABASE_URL`，应用启动时自动使用，无需手工配置环境变量。
 
 ### 从历史 SQLite 数据迁移到 MariaDB
 
@@ -213,17 +212,12 @@ export MARIADB_DATABASE=vconfig       # 数据库名
 
 1. 确保本机已安装 MariaDB，并创建好目标数据库与账号（参考上文环境变量）。
 2. 确认旧版 SQLite 数据库路径，例如 `/opt/vConfig/vconfig.db`。
-3. 在项目根目录执行：
+3. 在项目根目录执行（使用虚拟环境中的 Python，复用部署时配置好的 MariaDB 连接）：
 
 ```bash
 cd /opt/vConfig
-export MARIADB_HOST=localhost
-export MARIADB_PORT=3306
-export MARIADB_USER=vconfig
-export MARIADB_PASSWORD=你的密码
-export MARIADB_DATABASE=vconfig
 export SOURCE_SQLITE_PATH=/opt/vConfig/vconfig.db   # 旧 SQLite 文件路径
-python migrate_sqlite_to_mariadb.py
+./venv/bin/python migrate_sqlite_to_mariadb.py
 ```
 
 脚本会：

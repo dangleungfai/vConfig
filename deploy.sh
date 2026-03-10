@@ -133,22 +133,48 @@ else
     echo "SNMP 客户端已就绪 (snmpwalk)。"
 fi
 
-echo "[4/7] 检查 MariaDB 配置..."
-if [ -z "$DATABASE_URL" ]; then
-    # 如果未直接提供 DATABASE_URL，则要求通过 MARIADB_* 指定 MariaDB 连接信息
-    if [ -z "$MARIADB_HOST" ] || [ -z "$MARIADB_USER" ] || [ -z "$MARIADB_DATABASE" ]; then
-        echo "未检测到 DATABASE_URL，也未检测到完整的 MARIADB_* 环境变量。"
-        echo "当前版本仅支持使用 MariaDB 作为数据库，请先在系统中创建数据库与账号，并设置以下环境变量后再执行 ./deploy.sh："
-        echo "  export MARIADB_HOST=localhost"
-        echo "  export MARIADB_PORT=3306"
-        echo "  export MARIADB_USER=vconfig"
-        echo "  export MARIADB_PASSWORD=你的密码"
-        echo "  export MARIADB_DATABASE=vconfig"
-        echo "或直接设置 DATABASE_URL，例如："
-        echo "  export DATABASE_URL='mysql+pymysql://vconfig:你的密码@localhost:3306/vconfig'"
-        exit 1
-    fi
+echo "[4/7] 初始化 MariaDB（数据库与账号）..."
+DB_HOST_DEFAULT="localhost"
+DB_PORT_DEFAULT="3306"
+DB_NAME_DEFAULT="vconfig"
+DB_USER_DEFAULT="vconfig"
+DB_PASS_DEFAULT="vconfig"
+
+read -r -p "MySQL/MariaDB root 密码（默认 root）: " MYSQL_ROOT_PWD_INPUT
+MYSQL_ROOT_PWD="${MYSQL_ROOT_PWD_INPUT:-root}"
+read -r -p "vConfig 数据库名（默认 ${DB_NAME_DEFAULT}）: " DB_NAME_INPUT
+DB_NAME="${DB_NAME_INPUT:-$DB_NAME_DEFAULT}"
+read -r -p "vConfig 数据库用户名（默认 ${DB_USER_DEFAULT}）: " DB_USER_INPUT
+DB_USER="${DB_USER_INPUT:-$DB_USER_DEFAULT}"
+read -r -p "vConfig 数据库密码（默认 ${DB_PASS_DEFAULT}）: " DB_PASS_INPUT
+DB_PASS="${DB_PASS_INPUT:-$DB_PASS_DEFAULT}"
+DB_HOST="$DB_HOST_DEFAULT"
+DB_PORT="$DB_PORT_DEFAULT"
+
+echo "使用的数据库配置: host=${DB_HOST} port=${DB_PORT} db=${DB_NAME} user=${DB_USER}"
+
+mysql_exec() {
+    local sql="$1"
+    mysql -uroot -e "$sql" 2>/dev/null || mysql -uroot -p"${MYSQL_ROOT_PWD}" -e "$sql"
+}
+
+# 尝试为 root 设置密码（若失败仅给出提示，不中断）
+if ! mysql -uroot -p"${MYSQL_ROOT_PWD}" -e "SELECT 1" >/dev/null 2>&1; then
+    echo "尝试为 root 设置密码..."
+    mysql -uroot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PWD}'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || \
+        echo "警告：自动设置 root 密码失败，请手动确认 root 账号密码。"
 fi
+
+echo "创建数据库和业务账号（若不存在）..."
+mysql_exec "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || {
+    echo "错误：无法创建数据库，请检查 root 密码是否正确。"
+    exit 1
+}
+mysql_exec "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';" || true
+mysql_exec "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" || true
+
+DATABASE_URL="mysql+pymysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+export DATABASE_URL
 
 echo "[5/7] 创建虚拟环境并安装依赖..."
 if [ ! -d venv ]; then
@@ -221,6 +247,7 @@ if command -v systemctl &>/dev/null && [ -d /etc/systemd/system ]; then
     sed -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
         -e "s|{{PORT}}|${PORT}|g" \
         -e "s|{{RUN_USER}}|$RUN_USER|g" \
+        -e "s|{{DATABASE_URL}}|$DATABASE_URL|g" \
         "$SCRIPT_DIR/vconfig.service" | sudo tee /etc/systemd/system/vconfig.service > /dev/null
     sudo systemctl daemon-reload
     sudo systemctl enable vconfig
