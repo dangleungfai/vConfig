@@ -188,9 +188,7 @@ sudo systemctl restart vconfig  # 重启
 
 ---
 
-## 数据库：MariaDB 默认参数与迁移
-
-### 默认数据库参数
+## 数据库：MariaDB 默认参数
 
 当前版本仅支持使用 **MariaDB/MySQL** 作为数据库。执行 `deploy.sh` 时，脚本会以交互方式询问并自动初始化数据库，**直接回车即可使用以下默认值**：
 
@@ -205,23 +203,3 @@ sudo systemctl restart vconfig  # 重启
 - 创建数据库 `vconfig`（或你自定义的名称）；
 - 创建业务账号 `vconfig`/`vconfig`（或你自定义的账号/密码），并授予该库的全部权限；
 - 将这些参数写入 systemd 服务的 `DATABASE_URL`，应用启动时自动使用，无需手工配置环境变量。
-
-### 从历史 SQLite 数据迁移到 MariaDB
-
-早期版本使用 SQLite（`vconfig.db`）存储数据，若你有旧版本的数据，可通过项目根目录下的 `migrate_sqlite_to_mariadb.py` 将其迁移到 MariaDB：
-
-1. 确保本机已安装 MariaDB，并创建好目标数据库与账号（参考上文环境变量）。
-2. 确认旧版 SQLite 数据库路径，例如 `/opt/vConfig/vconfig.db`。
-3. 在项目根目录执行（使用虚拟环境中的 Python，复用部署时配置好的 MariaDB 连接）：
-
-```bash
-cd /opt/vConfig
-export SOURCE_SQLITE_PATH=/opt/vConfig/vconfig.db   # 旧 SQLite 文件路径
-./venv/bin/python migrate_sqlite_to_mariadb.py
-```
-
-脚本会：
-
-- 在 MariaDB 上按当前模型结构自动建表；
-- 依次从 SQLite 读取 `users/devices/app_settings/backup_logs/...` 等表，将数据插入 MariaDB；
-- 迁移完成后即可使用上文的 MariaDB 配置启动 vConfig，后续不再依赖 SQLite 文件。
