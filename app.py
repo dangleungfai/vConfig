@@ -47,6 +47,26 @@ _backup_job_executor_column_ensured = False
 _device_type_configs_initialized = False
 
 LOGO_DIR = os.path.join(DATA_ROOT, 'logo')
+
+
+def _table_has_column(conn, table_name, column_name):
+    """判断表是否包含某列，兼容 SQLite 与 MySQL/MariaDB。"""
+    from sqlalchemy import text
+    dialect = db.engine.dialect.name
+    if dialect == 'sqlite':
+        r = conn.execute(text("PRAGMA table_info(%s)" % table_name))
+        cols = [row[1] for row in r]
+        return column_name in cols
+    if dialect == 'mysql':
+        r = conn.execute(
+            text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"),
+            {"t": table_name}
+        )
+        cols = [row[0] for row in r]
+        return column_name in cols
+    return False
+
+
 LOGO_MAX_SIZE = (64, 64)
 
 SUPER_ADMIN_USERNAME = 'admin'
@@ -240,43 +260,37 @@ def _ensure_device_type_configs():
 
 
 def _ensure_user_password_column():
-    """为 users 表添加 password_hash 列（兼容旧库，仅针对 SQLite 简单处理）"""
+    """为 users 表添加 password_hash 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _user_password_column_ensured
     if _user_password_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(users)"))
-                    cols = [row[1] for row in r]
-                    if 'password_hash' not in cols:
-                        conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'users', 'password_hash'):
+                    conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+                    conn.commit()
             _user_password_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_user_email_phone_columns():
-    """为 users 表添加 email、phone 列（兼容旧库，仅 SQLite）"""
+    """为 users 表添加 email、phone 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _user_email_phone_columns_ensured
     if _user_email_phone_columns_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(users)"))
-                    cols = [row[1] for row in r]
-                    if 'email' not in cols:
-                        conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(128)"))
-                        conn.commit()
-                    if 'phone' not in cols:
-                        conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(32)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'users', 'email'):
+                    conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(128)"))
+                    conn.commit()
+                if not _table_has_column(conn, 'users', 'phone'):
+                    conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(32)"))
+                    conn.commit()
             _user_email_phone_columns_ensured = True
     except Exception:
         pass
@@ -346,163 +360,139 @@ def _ensure_tables():
 
 
 def _ensure_connection_type_column():
-    """为已有数据库添加 connection_type 列（兼容旧库）"""
+    """为已有数据库添加 connection_type 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _connection_type_column_ensured
     if _connection_type_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(devices)"))
-                    cols = [row[1] for row in r]
-                    if 'connection_type' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN connection_type VARCHAR(16)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'devices', 'connection_type'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN connection_type VARCHAR(16)"))
+                    conn.commit()
             _connection_type_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_device_group_column():
-    """为 devices 表添加 group 列（兼容旧库，仅 SQLite）"""
+    """为 devices 表添加 device_group 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _device_group_column_ensured
     if _device_group_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(devices)"))
-                    cols = [row[1] for row in r]
-                    if 'device_group' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN device_group VARCHAR(64)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'devices', 'device_group'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN device_group VARCHAR(64)"))
+                    conn.commit()
             _device_group_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_device_maintenance_columns():
-    """为 devices 表添加 maintenance_start、maintenance_end 列（兼容旧库，仅 SQLite）"""
+    """为 devices 表添加 maintenance_start、maintenance_end 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _device_maintenance_columns_ensured
     if _device_maintenance_columns_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(devices)"))
-                    cols = [row[1] for row in r]
-                    if 'maintenance_start' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN maintenance_start VARCHAR(8)"))
-                        conn.commit()
-                    if 'maintenance_end' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN maintenance_end VARCHAR(8)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'devices', 'maintenance_start'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN maintenance_start VARCHAR(8)"))
+                    conn.commit()
+                if not _table_has_column(conn, 'devices', 'maintenance_end'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN maintenance_end VARCHAR(8)"))
+                    conn.commit()
             _device_maintenance_columns_ensured = True
     except Exception:
         pass
 
 
 def _ensure_device_ssh_port_column():
-    """为 devices 表添加 ssh_port 列（兼容旧库，仅 SQLite）"""
+    """为 devices 表添加 ssh_port 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _device_ssh_port_column_ensured
     if _device_ssh_port_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(devices)"))
-                    cols = [row[1] for row in r]
-                    if 'ssh_port' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN ssh_port INTEGER"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'devices', 'ssh_port'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN ssh_port INTEGER"))
+                    conn.commit()
             _device_ssh_port_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_device_telnet_port_column():
-    """为 devices 表添加 telnet_port 列（兼容旧库，仅 SQLite）"""
+    """为 devices 表添加 telnet_port 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _device_telnet_port_column_ensured
     if _device_telnet_port_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(devices)"))
-                    cols = [row[1] for row in r]
-                    if 'telnet_port' not in cols:
-                        conn.execute(text("ALTER TABLE devices ADD COLUMN telnet_port INTEGER"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'devices', 'telnet_port'):
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN telnet_port INTEGER"))
+                    conn.commit()
             _device_telnet_port_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_user_allowed_groups_column():
-    """为 users 表添加 allowed_groups 列（兼容旧库，仅 SQLite）"""
+    """为 users 表添加 allowed_groups 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _user_allowed_groups_column_ensured
     if _user_allowed_groups_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(users)"))
-                    cols = [row[1] for row in r]
-                    if 'allowed_groups' not in cols:
-                        conn.execute(text("ALTER TABLE users ADD COLUMN allowed_groups VARCHAR(512)"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'users', 'allowed_groups'):
+                    conn.execute(text("ALTER TABLE users ADD COLUMN allowed_groups VARCHAR(512)"))
+                    conn.commit()
             _user_allowed_groups_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_backup_job_run_type_column():
-    """为 backup_job_runs 表添加 run_type 列（兼容旧库）"""
+    """为 backup_job_runs 表添加 run_type 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _backup_job_run_type_column_ensured
     if _backup_job_run_type_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(backup_job_runs)"))
-                    cols = [row[1] for row in r]
-                    if 'run_type' not in cols:
-                        conn.execute(text("ALTER TABLE backup_job_runs ADD COLUMN run_type VARCHAR(16) DEFAULT 'manual'"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'backup_job_runs', 'run_type'):
+                    conn.execute(text("ALTER TABLE backup_job_runs ADD COLUMN run_type VARCHAR(16) DEFAULT 'manual'"))
+                    conn.commit()
             _backup_job_run_type_column_ensured = True
     except Exception:
         pass
 
 
 def _ensure_backup_job_executor_column():
-    """为 backup_job_runs 表添加 executor 列（兼容旧库）"""
+    """为 backup_job_runs 表添加 executor 列（兼容旧库，支持 SQLite 与 MariaDB）"""
     global _backup_job_executor_column_ensured
     if _backup_job_executor_column_ensured:
         return
     try:
         from sqlalchemy import text
         with app.app_context():
-            if db.engine.dialect.name == 'sqlite':
-                with db.engine.connect() as conn:
-                    r = conn.execute(text("PRAGMA table_info(backup_job_runs)"))
-                    cols = [row[1] for row in r]
-                    if 'executor' not in cols:
-                        conn.execute(text("ALTER TABLE backup_job_runs ADD COLUMN executor VARCHAR(128) DEFAULT ''"))
-                        conn.commit()
+            with db.engine.connect() as conn:
+                if not _table_has_column(conn, 'backup_job_runs', 'executor'):
+                    conn.execute(text("ALTER TABLE backup_job_runs ADD COLUMN executor VARCHAR(128) DEFAULT ''"))
+                    conn.commit()
             _backup_job_executor_column_ensured = True
     except Exception:
         pass
@@ -4856,22 +4846,99 @@ def _get_sqlite_db_path():
 
 @app.route('/api/settings/db/backup')
 def db_backup():
-    """备份数据库：下载当前 SQLite 数据库文件"""
+    """备份数据库：
+
+    - 若使用 SQLite：直接下载当前 SQLite 数据库文件；
+    - 若使用 MariaDB/MySQL：调用 mysqldump 导出 SQL 并提供下载。
+    """
     if not _can_edit_settings():
         return jsonify({'error': '当前账号无权备份数据库。'}), 403
     db_path = _get_sqlite_db_path()
-    if not db_path or not os.path.isfile(db_path):
-        return jsonify({'error': '当前使用非 SQLite 或数据库文件不存在，暂不支持备份。'}), 400
-    dir_name = os.path.dirname(db_path)
-    file_name = os.path.basename(db_path)
-    fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
-    # Flask >= 2.0 中 attachment_filename 已废弃，使用 download_name
-    return send_from_directory(
-        dir_name,
-        file_name,
-        as_attachment=True,
-        download_name=fn,
-    )
+    # 情况 1：SQLite，直接返回 .db 文件
+    if db_path and os.path.isfile(db_path):
+        dir_name = os.path.dirname(db_path)
+        file_name = os.path.basename(db_path)
+        fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
+        # Flask >= 2.0 中 attachment_filename 已废弃，使用 download_name
+        return send_from_directory(
+            dir_name,
+            file_name,
+            as_attachment=True,
+            download_name=fn,
+        )
+
+    # 情况 2：MariaDB/MySQL，使用 mysqldump 导出
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if not uri:
+        return jsonify({'error': '未找到数据库连接配置，无法备份。'}), 400
+    try:
+        from sqlalchemy.engine.url import make_url
+        import subprocess
+    except ImportError:
+        return jsonify({'error': '服务器缺少必要组件，无法执行 MariaDB 备份。'}), 500
+
+    try:
+        url = make_url(uri)
+    except Exception as e:
+        return jsonify({'error': '解析数据库连接失败: %s' % e}), 500
+
+    driver = (url.drivername or '').split('+')[0]
+    if driver not in ('mysql', 'mariadb'):
+        return jsonify({'error': '当前数据库类型暂不支持在线备份，请使用数据库自带工具。'}), 400
+
+    db_name = url.database
+    if not db_name:
+        return jsonify({'error': '数据库名称缺失，无法备份。'}), 400
+
+    user = url.username or ''
+    host = url.host or 'localhost'
+    port = url.port or 3306
+    password = url.password or ''
+
+    if not user:
+        return jsonify({'error': '数据库用户名缺失，请在 DATABASE_URL 或 MARIADB_* 中配置用户名。'}), 400
+
+    env = os.environ.copy()
+    if password:
+        # 避免在命令行参数中暴露密码，使用环境变量传递
+        env['MYSQL_PWD'] = str(password)
+
+    cmd = [
+        'mysqldump',
+        '-h', str(host),
+        '-P', str(port),
+        '-u', str(user),
+        '--single-transaction',
+        '--quick',
+        '--skip-lock-tables',
+        str(db_name),
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return jsonify({'error': '未检测到 mysqldump，请在服务器上安装 MariaDB/MySQL 客户端工具后重试。'}), 500
+    except Exception as e:
+        return jsonify({'error': '执行 mysqldump 失败: %s' % e}), 500
+
+    if proc.returncode != 0:
+        err = proc.stderr.decode('utf-8', errors='ignore')
+        return jsonify({'error': 'mysqldump 返回非零状态码: %s' % (err[:400] or proc.returncode)}), 500
+
+    sql_data = proc.stdout
+    if not sql_data:
+        return jsonify({'error': '备份结果为空，请检查数据库中是否有数据。'}), 500
+
+    fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.sql'
+    resp = Response(sql_data, mimetype='application/sql')
+    resp.headers['Content-Disposition'] = 'attachment; filename=%s' % fn
+    return resp
 
 
 @app.route('/api/settings/db/restore', methods=['POST'])
@@ -4881,7 +4948,7 @@ def db_restore():
         return jsonify({'error': '当前账号无权恢复数据库。'}), 403
     db_path = _get_sqlite_db_path()
     if not db_path:
-        return jsonify({'error': '当前使用非 SQLite，暂不支持恢复。'}), 400
+        return jsonify({'error': '当前使用 MariaDB/MySQL，请使用 mysql 导入等方式恢复。'}), 400
     if 'file' not in request.files:
         return jsonify({'error': '请选择要恢复的数据库备份文件。'}), 400
     f = request.files['file']

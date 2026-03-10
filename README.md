@@ -52,7 +52,7 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
 
 ### 技术栈
 
-- **后端**：Python 3.8+，Flask，SQLAlchemy（SQLite）
+- **后端**：Python 3.8+，Flask，SQLAlchemy（MariaDB / MySQL）
 - **前端**：原生 HTML/CSS/JavaScript，无前端框架依赖
 - **设备连接**：Paramiko（SSH）、Telnetlib（Telnet）
 - **可选**：PySNMP（自动发现）、LDAP 集成
@@ -79,7 +79,7 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
 - **Web 层**：提供仪表盘、设备管理、备份任务、日志、配置浏览与对比、系统设置等页面及 REST API。
 - **业务层**：Flask 应用负责会话与权限、设备 CRUD、备份任务调度、Webhook 通知、用户与设置管理。
 - **备份与驱动层**：`backup_service` 通过 SSH/Telnet 连接设备，按 `device_drivers` 中各厂商的登录流程与命令执行配置拉取。
-- **数据层**：SQLite 存储设备、用户、设置、备份任务与日志；配置文件按设备落盘至 `data/configs/`。
+- **数据层**：MariaDB 存储设备、用户、设置、备份任务与日志；配置文件按设备落盘至 `data/configs/`。
 
 ### 项目目录结构
 
@@ -92,14 +92,13 @@ vConfig/
 ├── compliance.py       # 合规检查模块
 ├── device_drivers/     # 设备类型驱动（Cisco、Juniper、Huawei、H3C、RouterOS 及通用/自定义）
 ├── requirements.txt    # Python 依赖
-├── run.sh              # 一键部署与启动脚本
+├── deploy.sh           # 一键部署与启动脚本
 ├── vconfig.service     # systemd 服务单元（run.sh 自动安装）
 ├── templates/          # 页面模板
 ├── static/             # 前端静态资源（JS/CSS）
 └── data/               # 数据目录（可由环境变量指定）
     ├── configs/        # 各设备备份配置文件
-    ├── log/            # 日志
-    └── vconfig.db      # SQLite 数据库（默认）
+    └── log/            # 日志
 ```
 
 ---
@@ -116,7 +115,8 @@ vConfig/
 
 ```bash
 sudo apt update
-sudo apt install -y openssl python3 python3-venv python3-pip sqlite3 snmp
+sudo apt install -y openssl python3 python3-venv python3-pip snmp \
+    mariadb-server mariadb-client
 ```
 
 ### 2. 安装 Git 并克隆仓库
@@ -151,7 +151,7 @@ chmod a+x deploy.sh
 sudo ./deploy.sh
 ```
 
-脚本将自动完成：检查运行环境（若缺少关键依赖会给出明确提示并退出）；创建虚拟环境 `./venv` 并安装 `requirements.txt`；初始化数据库（如不存在）并重置管理员密码；生成 HTTPS 自签名证书（存放于 `data/certs/`，如未安装 openssl 则回退为 HTTP 模式）；注册并启动 systemd 服务 `vconfig`；询问监听端口（root 默认 443，普通用户默认 8443）并输出访问 URL。
+脚本将自动完成：检查运行环境（若缺少关键依赖会给出明确提示并退出）；创建虚拟环境 `./venv` 并安装 `requirements.txt`；使用 **MariaDB** 初始化数据库并重置管理员密码；生成 HTTPS 自签名证书（存放于 `data/certs/`，如未安装 openssl 则回退为 HTTP 模式）；注册并启动 systemd 服务 `vconfig`；询问监听端口（root 默认 443，普通用户默认 8443）并输出访问 URL。
 
 部署完成后，使用以下命令管理服务：
 
@@ -185,3 +185,49 @@ sudo systemctl restart vconfig  # 重启
 
 - **[API.md](API.md)**：REST API 说明，含认证方式、常用接口及备份失败 Webhook 格式。
 - **[RESTORE.md](RESTORE.md)**：从备份标签或提交恢复代码版本的说明。
+
+---
+
+## 数据库：MariaDB 配置与迁移
+
+### 使用 MariaDB 作为唯一数据库
+
+当前版本仅支持使用 **MariaDB/MySQL** 作为数据库，请在部署前准备好数据库实例与账号，并通过环境变量进行配置：
+
+```bash
+export MARIADB_HOST=localhost         # MariaDB 主机
+export MARIADB_PORT=3306              # 端口
+export MARIADB_USER=vconfig           # 数据库用户名
+export MARIADB_PASSWORD=你的密码      # 数据库密码
+export MARIADB_DATABASE=vconfig       # 数据库名
+```
+
+应用启动时将按以下优先级确定数据库连接：
+
+1. 若设置了 `DATABASE_URL`，直接使用该连接串（如 `mysql+pymysql://user:pass@host:3306/dbname`）。
+2. 否则若设置了 `MARIADB_*`，则自动构建 MariaDB 连接串。
+
+### 从历史 SQLite 数据迁移到 MariaDB
+
+早期版本使用 SQLite（`vconfig.db`）存储数据，若你有旧版本的数据，可通过项目根目录下的 `migrate_sqlite_to_mariadb.py` 将其迁移到 MariaDB：
+
+1. 确保本机已安装 MariaDB，并创建好目标数据库与账号（参考上文环境变量）。
+2. 确认旧版 SQLite 数据库路径，例如 `/opt/vConfig/vconfig.db`。
+3. 在项目根目录执行：
+
+```bash
+cd /opt/vConfig
+export MARIADB_HOST=localhost
+export MARIADB_PORT=3306
+export MARIADB_USER=vconfig
+export MARIADB_PASSWORD=你的密码
+export MARIADB_DATABASE=vconfig
+export SOURCE_SQLITE_PATH=/opt/vConfig/vconfig.db   # 旧 SQLite 文件路径
+python migrate_sqlite_to_mariadb.py
+```
+
+脚本会：
+
+- 在 MariaDB 上按当前模型结构自动建表；
+- 依次从 SQLite 读取 `users/devices/app_settings/backup_logs/...` 等表，将数据插入 MariaDB；
+- 迁移完成后即可使用上文的 MariaDB 配置启动 vConfig，后续不再依赖 SQLite 文件。

@@ -123,23 +123,7 @@ if ! "$PYTHON_CMD" -m venv --help >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "[3/7] 检查并安装 sqlite3 客户端..."
-if ! command -v sqlite3 &>/dev/null; then
-    if command -v apt-get &>/dev/null; then
-        echo "未检测到 sqlite3，正在通过 apt-get 安装..."
-        sudo apt-get update && sudo apt-get install -y sqlite3
-    elif command -v apt &>/dev/null; then
-        echo "未检测到 sqlite3，正在通过 apt 安装..."
-        sudo apt update && sudo apt install -y sqlite3
-    else
-        echo "未检测到 sqlite3，且无法自动安装。请在系统中先手动安装 sqlite3 后再执行 ./deploy.sh。"
-        exit 1
-    fi
-else
-    echo "sqlite3 已就绪。"
-fi
-
-echo "[4/7] 检查并安装 SNMP 客户端(snmpwalk)..."
+echo "[3/7] 检查并安装 SNMP 客户端(snmpwalk)..."
 if ! command -v snmpwalk &>/dev/null; then
     echo "提示：未检测到 snmpwalk，仅影响手工测试，不影响自动发现功能。"
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
@@ -147,6 +131,23 @@ if ! command -v snmpwalk &>/dev/null; then
     fi
 else
     echo "SNMP 客户端已就绪 (snmpwalk)。"
+fi
+
+echo "[4/7] 检查 MariaDB 配置..."
+if [ -z "$DATABASE_URL" ]; then
+    # 如果未直接提供 DATABASE_URL，则要求通过 MARIADB_* 指定 MariaDB 连接信息
+    if [ -z "$MARIADB_HOST" ] || [ -z "$MARIADB_USER" ] || [ -z "$MARIADB_DATABASE" ]; then
+        echo "未检测到 DATABASE_URL，也未检测到完整的 MARIADB_* 环境变量。"
+        echo "当前版本仅支持使用 MariaDB 作为数据库，请先在系统中创建数据库与账号，并设置以下环境变量后再执行 ./deploy.sh："
+        echo "  export MARIADB_HOST=localhost"
+        echo "  export MARIADB_PORT=3306"
+        echo "  export MARIADB_USER=vconfig"
+        echo "  export MARIADB_PASSWORD=你的密码"
+        echo "  export MARIADB_DATABASE=vconfig"
+        echo "或直接设置 DATABASE_URL，例如："
+        echo "  export DATABASE_URL='mysql+pymysql://vconfig:你的密码@localhost:3306/vconfig'"
+        exit 1
+    fi
 fi
 
 echo "[5/7] 创建虚拟环境并安装依赖..."
@@ -160,9 +161,7 @@ fi
 
 echo "[6/7] 初始化数据目录与数据库..."
 mkdir -p data data/configs data/log
-if [ ! -f vconfig.db ] && [ ! -f config_backup.db ] && [ ! -f data/vconfig.db ] && [ ! -f data/config_backup.db ]; then
-    ./venv/bin/flask --app app init-db
-fi
+./venv/bin/flask --app app init-db
 ./venv/bin/flask --app app reset-admin-password
 
 echo "[7/7] 确定监听端口与访问地址..."

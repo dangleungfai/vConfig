@@ -10,11 +10,29 @@ CONFIGS_DIR = os.path.join(DATA_ROOT, 'configs')
 LOG_DIR = os.path.join(DATA_ROOT, 'log')
 CERTS_DIR = os.path.join(DATA_ROOT, 'certs')  # HTTPS 自签名证书目录
 
-# 数据库
-SQLALCHEMY_DATABASE_URI = os.environ.get(
-    'DATABASE_URL',
-    f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
-)
+# 数据库：优先 DATABASE_URL；若未设置则看 MARIADB_*，有则用 MariaDB，否则 SQLite
+def _database_uri():
+    url = os.environ.get('DATABASE_URL', '').strip()
+    if url:
+        return url
+    # 仅当设置了 MARIADB_PASSWORD 或 MARIADB_USER 等时才用 MariaDB，避免影响未配置用户
+    use_mariadb = os.environ.get('MARIADB_PASSWORD') is not None or os.environ.get('MARIADB_USER', '').strip()
+    if not use_mariadb:
+        return f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
+    host = os.environ.get('MARIADB_HOST', 'localhost').strip()
+    port = os.environ.get('MARIADB_PORT', '3306').strip()
+    user = (os.environ.get('MARIADB_USER', '') or 'vconfig').strip()
+    password = os.environ.get('MARIADB_PASSWORD', '')
+    database = (os.environ.get('MARIADB_DATABASE', '') or 'vconfig').strip()
+    if not host or not user or not database:
+        return f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
+    from urllib.parse import quote_plus
+    pw_enc = quote_plus(password) if password else ''
+    auth = f'{user}:{pw_enc}' if pw_enc else user
+    return f'mysql+pymysql://{auth}@{host}:{port}/{database}'
+
+
+SQLALCHEMY_DATABASE_URI = _database_uri()
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Flask 会话密钥（用于登录 Session 等）
