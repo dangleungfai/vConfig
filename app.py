@@ -3161,9 +3161,51 @@ def _start_full_backup(run_type='manual', executor=''):
                     total = job_to_save.get('total', 0)
                     ok = job_to_save.get('ok', 0)
                     fail = job_to_save.get('fail', 0)
-                    msg = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
+                    # 统计失败设备明细列表
+                    failed_lines = []
+                    try:
+                        from datetime import timezone as dt_timezone
+                        st_raw = (job_to_save.get('start_time') or '').strip()
+                        et_raw = (job_to_save.get('end_time') or '').strip()
+                        st = None
+                        et = None
+                        if st_raw:
+                            st = datetime.fromisoformat(st_raw.replace('Z', '+00:00'))
+                        if et_raw:
+                            et = datetime.fromisoformat(et_raw.replace('Z', '+00:00'))
+                        if st and et:
+                            if st.tzinfo:
+                                st_utc = st.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                            else:
+                                st_utc = st
+                            if et.tzinfo:
+                                et_utc = et.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                            else:
+                                et_utc = et
+                            logs = BackupLog.query.filter(
+                                BackupLog.created_at >= st_utc,
+                                BackupLog.created_at <= et_utc,
+                                BackupLog.status != 'OK',
+                            ).order_by(BackupLog.created_at.asc()).all()
+                            for log in logs:
+                                reason = log.message or '未知错误'
+                                failed_lines.append(
+                                    '- 设备名称: %s，管理 IP: %s，设备类型: %s，失败原因: %s' % (
+                                        log.hostname or '',
+                                        log.ip or '',
+                                        log.device_type or '',
+                                        reason,
+                                    )
+                                )
+                    except Exception as e:
+                        app.logger.warning('统计备份失败设备列表时出错: %s', e)
+                    header = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
                         job_to_save.get('id', ''), total, ok, fail
                     )
+                    if failed_lines:
+                        msg = header + '\n\n备份失败设备列表：\n' + '\n'.join(failed_lines)
+                    else:
+                        msg = header
                     _maybe_send_alerts('backup_failure', '【vConfig】备份失败告警', msg, {
                         'event': 'backup_failure',
                         'job_id': job_to_save.get('id'),
@@ -3349,12 +3391,14 @@ def run_backup_one(device_id):
                     db.session.commit()
                     # 单台备份失败时触发告警
                     if status != 'OK':
-                        msg = '【vConfig 备份告警】单台备份失败：%s (%s, %s)。错误：%s' % (
-                            hostname or ip or '',
-                            ip or '',
-                            dev_type or '',
-                            message or '未知错误',
-                        )
+                        msg_lines = [
+                            '【vConfig 备份告警】单台备份失败：',
+                            '- 设备名称: %s' % (hostname or ip or ''),
+                            '- 管理 IP: %s' % (ip or ''),
+                            '- 设备类型: %s' % (dev_type or ''),
+                            '- 失败原因: %s' % (message or '未知错误'),
+                        ]
+                        msg = '\n'.join(msg_lines)
                         _maybe_send_alerts('backup_failure', '【vConfig】单台备份失败告警', msg, {
                             'event': 'single_backup_failure',
                             'job_id': job.id,
