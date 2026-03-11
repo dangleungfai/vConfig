@@ -448,7 +448,7 @@ a:hover { color: var(--primary-hover); }
 /* 配置变更汇总：左右布局（左列表，右明细），比例参考系统设置 */
 .config-changes-layout {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: minmax(200px, max-content) minmax(0, 1fr);
     gap: 1.5rem;
     align-items: stretch;
 }
@@ -457,6 +457,7 @@ a:hover { color: var(--primary-hover); }
     border-radius: var(--radius);
     border: 1px solid var(--border);
     background: var(--bg-elevated);
+    min-width: 0;
 }
 .config-changes-right {
     min-width: 0;
@@ -479,8 +480,8 @@ a:hover { color: var(--primary-hover); }
 }
 .config-changes-left .recent-item {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    column-gap: 0.1rem;
+    grid-template-columns: auto auto;
+    column-gap: 0.75rem;
     align-items: center;
     padding: 0.4rem 0.5rem;
     font-size: 0.85rem;
@@ -490,6 +491,10 @@ a:hover { color: var(--primary-hover); }
 }
 .config-changes-left .recent-item span {
     text-align: left;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .config-changes-left .recent-item:last-child {
     border-bottom: none;

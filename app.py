@@ -1476,6 +1476,30 @@ def logout_view():
     return redirect(url_for('login_view'))
 
 
+# 备份失败原因规范化（行业通用英文），用于告警正文
+def _normalize_backup_failure_reason(status, message):
+    """将 status + message 映射为统一英文失败原因。"""
+    status = (status or '').strip()
+    msg = (message or '').strip().lower()
+    if status == 'Fail_Network':
+        return 'Network unreachable (ICMP/timeout)'
+    if status == 'Fail_Login':
+        return 'Authentication failed (invalid credentials)'
+    if status == 'Fail' or status:
+        if 'refused' in msg or 'connection refused' in msg:
+            return 'Connection refused'
+        if 'timeout' in msg or 'timed out' in msg:
+            return 'Connection or operation timeout'
+        if 'port' in msg and ('unreachable' in msg or 'refused' in msg or 'not open' in msg):
+            return 'Port unreachable'
+        if 'unreachable' in msg or 'no route' in msg or 'host is unreachable' in msg:
+            return 'Network unreachable (ICMP/timeout)'
+        if 'auth' in msg or 'password' in msg or 'login' in msg or 'credential' in msg or 'permission denied' in msg:
+            return 'Authentication failed (invalid credentials)'
+        return 'Other error (abnormal exit)'
+    return 'Other error (abnormal exit)'
+
+
 def _log_callback(ip, hostname, dev_type, status, message, duration, config_path=None):
     with app.app_context():
         rel_path = None
@@ -3156,13 +3180,14 @@ def _start_full_backup(run_type='manual', executor=''):
                     _save_config_changes_to_db()
                 except Exception as e:
                     app.logger.warning('保存配置变动到数据库失败: %s', e)
-                # 备份失败告警（邮箱 + Webhook，由告警设置控制）
-                if job_to_save.get('fail', 0) > 0:
-                    total = job_to_save.get('total', 0)
-                    ok = job_to_save.get('ok', 0)
-                    fail = job_to_save.get('fail', 0)
-                    # 统计失败设备明细列表
-                    failed_lines = []
+                # 备份任务完成告警（不管有无失败都通知；有失败/未执行时附列表）
+                total = job_to_save.get('total', 0)
+                ok = job_to_save.get('ok', 0)
+                fail = job_to_save.get('fail', 0)
+                done = job_to_save.get('done', 0)
+                failed_lines = []
+                not_run_count = max(0, total - done)
+                with app.app_context():
                     try:
                         from datetime import timezone as dt_timezone
                         st_raw = (job_to_save.get('start_time') or '').strip()
@@ -3188,7 +3213,7 @@ def _start_full_backup(run_type='manual', executor=''):
                                 BackupLog.status != 'OK',
                             ).order_by(BackupLog.created_at.asc()).all()
                             for log in logs:
-                                reason = log.message or '未知错误'
+                                reason = _normalize_backup_failure_reason(log.status, log.message)
                                 failed_lines.append(
                                     '- 设备名称: %s，管理 IP: %s，设备类型: %s，失败原因: %s' % (
                                         log.hostname or '',
@@ -3202,11 +3227,13 @@ def _start_full_backup(run_type='manual', executor=''):
                     header = '【vConfig 备份告警】任务 %s 完成：共 %d 台，成功 %d 台，失败 %d 台。' % (
                         job_to_save.get('id', ''), total, ok, fail
                     )
+                    parts = [header]
                     if failed_lines:
-                        msg = header + '\n\n备份失败设备列表：\n' + '\n'.join(failed_lines)
-                    else:
-                        msg = header
-                    _maybe_send_alerts('backup_failure', '【vConfig】备份失败告警', msg, {
+                        parts.append('\n备份失败设备列表：\n' + '\n'.join(failed_lines))
+                    if not_run_count > 0:
+                        parts.append('\n未执行或未记录: %d 台' % not_run_count)
+                    msg = '\n'.join(parts)
+                    _maybe_send_alerts('backup_failure', '【vConfig】备份任务完成告警', msg, {
                         'event': 'backup_failure',
                         'job_id': job_to_save.get('id'),
                         'total': total,
@@ -3391,12 +3418,13 @@ def run_backup_one(device_id):
                     db.session.commit()
                     # 单台备份失败时触发告警
                     if status != 'OK':
+                        reason = _normalize_backup_failure_reason(status, message)
                         msg_lines = [
                             '【vConfig 备份告警】单台备份失败：',
                             '- 设备名称: %s' % (hostname or ip or ''),
                             '- 管理 IP: %s' % (ip or ''),
                             '- 设备类型: %s' % (dev_type or ''),
-                            '- 失败原因: %s' % (message or '未知错误'),
+                            '- 失败原因: %s' % reason,
                         ]
                         msg = '\n'.join(msg_lines)
                         _maybe_send_alerts('backup_failure', '【vConfig】单台备份失败告警', msg, {
