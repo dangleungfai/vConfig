@@ -291,7 +291,28 @@ function showTab(name) {
     if (name === 'dashboard') loadDashboard();
     if (name === 'devices') { loadDevices(); refreshDeviceTypeOptions().catch(() => {}); }
     if (name === 'backup') loadBackupStatus();
-    if (name === 'logs') loadLogs();
+    if (name === 'logs') {
+        const hash = location.hash || '';
+        const qs = hash.indexOf('?') >= 0 ? hash.slice(hash.indexOf('?') + 1) : '';
+        if (qs) {
+            try {
+                const params = new URLSearchParams(qs);
+                if (params.has('job_id')) {
+                    logJobId = params.get('job_id');
+                    logFailOnly = false;
+                    logFailDate = '';
+                }
+                if (params.has('fail_date')) {
+                    logFailDate = params.get('fail_date') || todayLocalDateStr();
+                    logFailOnly = true;
+                    logJobId = null;
+                    const dateEl = document.getElementById('log-fail-date');
+                    if (dateEl) dateEl.value = logFailDate;
+                }
+            } catch (e) {}
+        }
+        loadLogs();
+    }
     if (name === 'configs') loadConfigs();
     if (name === 'config-changes') loadConfigChangesPage();
     if (name === 'settings') {
@@ -2936,11 +2957,15 @@ function renderBackupJobs(d) {
                     <td><span class="badge badge-warn">进行中</span></td>
                     <td>${j.done || 0} / ${j.total || 0}</td>
                     <td class="status-ok">${j.ok || 0}</td>
-                    <td class="status-fail">${j.fail || 0}</td>
+                    <td class="status-fail">${(j.fail || 0) > 0 ? `<span class="log-fail-count-link" data-job-id="${escapeHtml(j.id || '')}">${j.fail || 0}</span>` : (j.fail || 0)}</td>
                     <td>-</td>
                 </tr>
             `;
         }
+        const failCount = j.fail ?? '-';
+        const failCell = (typeof failCount === 'number' && failCount > 0)
+            ? `<span class="log-fail-count-link" data-job-id="${escapeHtml(j.id || '')}">${failCount}</span>`
+            : String(failCount);
         const statusBadge = j.status === 'completed'
             ? '<span class="badge badge-ok">已完成</span>'
             : (j.status === 'running' ? '<span class="badge badge-warn">进行中</span>' : '<span class="badge">' + escapeHtml(j.status || '') + '</span>');
@@ -2956,7 +2981,7 @@ function renderBackupJobs(d) {
                 <td>${statusBadge}</td>
                 <td>${progress}</td>
                 <td class="status-ok">${j.ok ?? '-'}</td>
-                <td class="status-fail">${j.fail ?? '-'}</td>
+                <td class="status-fail">${failCell}</td>
                 <td>${duration}</td>
             </tr>
         `;
@@ -3053,6 +3078,18 @@ document.getElementById('backup-jobs-search')?.addEventListener('keypress', e =>
 document.getElementById('btn-backup-jobs-search')?.addEventListener('click', applyBackupJobsSearch);
 document.getElementById('backup-jobs-per-page')?.addEventListener('change', () => { backupJobsPage = 1; if (_lastBackupJobsData) renderBackupJobs(_lastBackupJobsData); });
 
+document.getElementById('panel-backup')?.addEventListener('click', (e) => {
+    const link = e.target.closest('.log-fail-count-link');
+    if (!link) return;
+    const id = link.getAttribute('data-job-id');
+    if (id) {
+        logJobId = id;
+        logFailOnly = false;
+        logFailDate = '';
+        showTab('logs');
+    }
+});
+
 // 备份
 document.getElementById('btn-run-backup').addEventListener('click', async () => {
     const btn = document.getElementById('btn-run-backup');
@@ -3115,17 +3152,35 @@ function pollBackupStatus() {
     tick();
 }
 
-// 日志
+// 日志（支持「备份失败日志」按日筛选、按任务 job_id 筛选）
 let logPage = 1;
 let logPerPage = 50;
 let logSortBy = 'created_at';
 let logSortDir = 'desc';
+let logFailOnly = false;
+let logFailDate = '';
+let logJobId = null;
+
+function todayLocalDateStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 async function loadLogs() {
     const search = (document.getElementById('log-search') || document.getElementById('log-hostname'))?.value?.trim() || '';
     const perPageEl = document.getElementById('log-per-page');
     if (perPageEl) logPerPage = parseInt(perPageEl.value, 10) || 50;
     let url = `${API}/logs?page=${logPage}&per_page=${logPerPage}&sort_by=${encodeURIComponent(logSortBy)}&sort_dir=${encodeURIComponent(logSortDir)}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (logFailOnly) url += '&fail_only=1';
+    if (logFailDate) url += '&date=' + encodeURIComponent(logFailDate);
+    if (logJobId) {
+        url += '&job_id=' + encodeURIComponent(logJobId);
+        logJobId = null;
+    }
     const res = await fetch(url);
     const data = await res.json();
     const tz = data.timezone || 'Asia/Shanghai';
@@ -3186,6 +3241,32 @@ function updateLogSortUI(currentBy, currentDir) {
     });
 }
 document.getElementById('btn-refresh-logs').addEventListener('click', () => { logPage = 1; loadLogs(); });
+
+document.getElementById('btn-log-fail-only')?.addEventListener('click', () => {
+    logFailOnly = true;
+    logFailDate = logFailDate || todayLocalDateStr();
+    const dateEl = document.getElementById('log-fail-date');
+    if (dateEl) dateEl.value = logFailDate;
+    logPage = 1;
+    loadLogs();
+});
+document.getElementById('log-fail-date')?.addEventListener('change', function () {
+    const v = this.value ? this.value.trim() : '';
+    logFailDate = v;
+    logFailOnly = !!v;
+    logPage = 1;
+    loadLogs();
+});
+document.getElementById('btn-log-show-all')?.addEventListener('click', () => {
+    logFailOnly = false;
+    logFailDate = '';
+    logJobId = null;
+    const dateEl = document.getElementById('log-fail-date');
+    if (dateEl) dateEl.value = '';
+    logPage = 1;
+    loadLogs();
+});
+
 const logSearchEl = document.getElementById('log-search') || document.getElementById('log-hostname');
 if (logSearchEl) {
     logSearchEl.addEventListener('keypress', e => { if (e.key === 'Enter') loadLogs(); });

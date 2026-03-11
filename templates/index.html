@@ -273,6 +273,11 @@
     <div class="devices-toolbar filters-bar">
         <input type="text" id="log-search" data-i18n-placeholder="placeholder_search_hostname_ip" placeholder="搜索 主机名 / 管理 IP">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-logs" data-i18n="btn_search">搜索</button>
+        <span class="log-fail-filter-wrap">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-log-fail-only" data-i18n="btn_backup_fail_logs">备份失败日志</button>
+            <label class="log-fail-date-label"><span data-i18n="label_date">日期</span><input type="date" id="log-fail-date" class="log-fail-date"></label>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-log-show-all" data-i18n="btn_show_all_logs">显示全部</button>
+        </span>
     </div>
     <div class="table-wrap table-resizable">
         <table class="table table-logs" id="log-table">

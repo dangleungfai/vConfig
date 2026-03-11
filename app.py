@@ -3889,7 +3889,7 @@ def terminal_close(device_id):
 # ---------- 日志 ----------
 @app.route('/api/logs', methods=['GET'])
 def list_logs():
-    """备份日志列表"""
+    """备份日志列表。支持 fail_only=1（仅失败）、date=YYYY-MM-DD（按日）、job_id=xxx（某次任务的失败日志）。"""
     page = request.args.get('page', 1, type=int)
     default_pp = int(_get_setting('log_per_page_default', '50') or '50')
     per_page = min(request.args.get('per_page', default_pp, type=int), 100)
@@ -3898,6 +3898,9 @@ def list_logs():
     search = request.args.get('search', '').strip()  # 同时匹配主机名或管理 IP
     status = request.args.get('status', '').strip()
     device_id = request.args.get('device_id', type=int)
+    fail_only = request.args.get('fail_only', '') in ('1', 'true', 'yes')
+    date_str = request.args.get('date', '').strip()  # YYYY-MM-DD，按配置时区该日 00:00~24:00 过滤
+    job_id = request.args.get('job_id', '').strip()
     sort_by = (request.args.get('sort_by') or 'created_at').strip()
     sort_dir = (request.args.get('sort_dir') or 'desc').strip().lower()
     if sort_dir not in ('asc', 'desc'):
@@ -3936,6 +3939,42 @@ def list_logs():
             q = q.filter(BackupLog.hostname == dev.hostname)
     if status:
         q = q.filter(BackupLog.status == status)
+
+    if fail_only:
+        q = q.filter(BackupLog.status != 'OK')
+    if date_str:
+        try:
+            from datetime import timezone as dt_timezone
+            ZoneInfo = _get_zoneinfo()
+            tz_name = _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE
+            if ZoneInfo:
+                tz = ZoneInfo(tz_name)
+                day_start = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=tz)
+                day_end = day_start + timedelta(days=1)
+                day_start_utc = day_start.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                day_end_utc = day_end.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                q = q.filter(BackupLog.created_at >= day_start_utc, BackupLog.created_at < day_end_utc)
+        except Exception:
+            pass
+    if job_id:
+        run = BackupJobRun.query.get(job_id)
+        if run and run.start_time and run.end_time:
+            try:
+                from datetime import timezone as dt_timezone
+                st = datetime.fromisoformat((run.start_time or '').replace('Z', '+00:00'))
+                et = datetime.fromisoformat((run.end_time or '').replace('Z', '+00:00'))
+                if getattr(st, 'tzinfo', None):
+                    st = st.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                if getattr(et, 'tzinfo', None):
+                    et = et.astimezone(dt_timezone.utc).replace(tzinfo=None)
+                q = q.filter(
+                    BackupLog.created_at >= st,
+                    BackupLog.created_at <= et,
+                    BackupLog.status != 'OK',
+                )
+            except Exception:
+                pass
+
     pagination = q.paginate(page=page, per_page=per_page)
     timezone = _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE
     return jsonify({
