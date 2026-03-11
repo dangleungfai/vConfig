@@ -4552,8 +4552,12 @@ document.getElementById('btn-update-ssl-cert')?.addEventListener('click', async 
     }
 });
 
-// 密码显示/隐藏
+// 密码显示/隐藏（仅管理员可用）
 document.getElementById('btn-toggle-password').addEventListener('click', function() {
+    if (window.__canEditSettings === false) {
+        alert('仅管理员可以查看和修改密码。');
+        return;
+    }
     const input = document.getElementById('setting-password');
     const isPass = input.type === 'password';
     input.type = isPass ? 'text' : 'password';
@@ -4561,8 +4565,12 @@ document.getElementById('btn-toggle-password').addEventListener('click', functio
     this.setAttribute('aria-label', isPass ? '隐藏密码' : '显示密码');
 });
 
-// LDAP Bind 密码显示/隐藏
+// LDAP Bind 密码显示/隐藏（仅管理员可用）
 document.getElementById('btn-toggle-ldap-bind-password')?.addEventListener('click', function() {
+    if (window.__canEditSettings === false) {
+        alert('仅管理员可以查看和修改密码。');
+        return;
+    }
     const input = document.getElementById('setting-ldap-bind-password');
     if (!input) return;
     const isPass = input.type === 'password';
@@ -4827,8 +4835,12 @@ document.getElementById('btn-test-email')?.addEventListener('click', async () =>
     }
 });
 
-// SMTP 密码显示/隐藏
+// SMTP 密码显示/隐藏（仅管理员可用）
 document.getElementById('btn-toggle-alert-smtp-password')?.addEventListener('click', function() {
+    if (window.__canEditSettings === false) {
+        alert('仅管理员可以查看和修改密码。');
+        return;
+    }
     const input = document.getElementById('setting-alert-smtp-password');
     if (!input) return;
     const isPass = input.type === 'password';
