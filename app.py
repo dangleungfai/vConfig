@@ -4032,7 +4032,9 @@ def inject_footer_vars():
             'footer_timezone': _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE,
             'footer_client_ip': client_ip,
             'current_user': session.get('user') or '',
-            'static_version': 2,  # 静态资源版本，改版后递增以强制浏览器拉取最新 JS/CSS
+            'user_role': _current_role(),
+            'show_settings_nav': _current_role() != 'viewer',
+            'static_version': 3,  # 静态资源版本，改版后递增以强制浏览器拉取最新 JS/CSS
             'logo_url': logo_url,
             'language': _get_setting('language', 'zh') or 'zh',
         }
@@ -4043,7 +4045,9 @@ def inject_footer_vars():
             'footer_timezone': DEFAULT_TIMEZONE,
             'footer_client_ip': '',
             'current_user': session.get('user') or '',
-            'static_version': 2,
+            'user_role': _current_role(),
+            'show_settings_nav': _current_role() != 'viewer',
+            'static_version': 3,
             'logo_url': '',
             'language': 'zh',
         }
@@ -4165,6 +4169,8 @@ def logo():
 # ---------- 设置 ----------
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
+    if _current_role() == 'viewer':
+        return jsonify({'error': '只读用户无权访问系统设置'}), 403
     # 自动发现类型关键字：若用户尚未自定义，则使用一份内置规则展示给前端
     discovery_type_keywords = _get_setting('discovery_type_keywords', '') or ''
     if not discovery_type_keywords:

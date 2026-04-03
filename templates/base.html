@@ -38,7 +38,9 @@
                 <a href="#" data-tab="logs" class="tab" data-i18n="nav_logs">备份日志</a>
                 <a href="#" data-tab="configs" class="tab" data-i18n="nav_configs">备份配置</a>
                 <a href="#" data-tab="config-changes" class="tab" data-i18n="nav_config_changes">配置变动</a>
+                {% if show_settings_nav %}
                 <a href="#" data-tab="settings" class="tab" data-i18n="nav_settings">系统设置</a>
+                {% endif %}
             </nav>
             <div class="header-right">
             <div class="theme-switcher" id="theme-switcher">
@@ -69,6 +71,7 @@
     </footer>
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <script>window.__INIT_LANG = '{{ language | default("zh") }}';</script>
+    <script>window.__USER_ROLE = {{ user_role | tojson }};</script>
     <script src="{{ url_for('static', filename='i18n.js') }}{% if static_version %}?v={{ static_version }}{% endif %}"></script>
     <script src="{{ url_for('static', filename='app.js') }}{% if static_version %}?v={{ static_version }}{% endif %}"></script>
 </body>

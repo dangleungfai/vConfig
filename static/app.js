@@ -277,6 +277,10 @@ function formatInTimezone(iso, tz) {
 }
 
 function showTab(name) {
+    if (name === 'settings' && window.__USER_ROLE === 'viewer') {
+        toast(window.t ? window.t('toast_settings_viewer_denied') : '只读用户无法访问系统设置', 'warn');
+        return;
+    }
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     const tab = document.querySelector(`[data-tab="${name}"]`);
@@ -1139,6 +1143,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         let tab = 'dashboard';
         try { tab = sessionStorage.getItem('vconfig_tab') || 'dashboard'; } catch (e) {}
+        if (window.__USER_ROLE === 'viewer' && tab === 'settings') {
+            tab = 'dashboard';
+            try { sessionStorage.setItem('vconfig_tab', 'dashboard'); } catch (_) {}
+        }
+        const h = (location.hash || '').replace(/^#/, '');
+        if (window.__USER_ROLE === 'viewer' && h === 'settings') {
+            try { location.hash = ''; } catch (_) {}
+        }
         const panel = document.getElementById('panel-' + tab);
         if (panel) showTab(tab); else loadDashboard();
     }
