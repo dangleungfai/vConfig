@@ -710,6 +710,11 @@ def _set_setting(key: str, value: str):
     db.session.commit()
 
 
+def _setting_has_secret_value(key: str) -> bool:
+    """用于接口脱敏：判断某项密钥类设置是否已保存非空值。"""
+    return bool((_get_setting(key, '') or '').strip())
+
+
 def _webhook_body_for_url(url: str, text: str, extra: dict = None) -> bytes:
     """根据 Webhook URL 识别平台并生成对应请求体。支持：企业微信、钉钉、飞书、Slack、Discord、Teams 及通用 JSON。"""
     import json as _json
@@ -4173,9 +4178,10 @@ def get_settings():
         ])
 
     return jsonify({
-        # 全局 Telnet/SSH 账号默认留空，仅从设置中读取
+        # 全局 Telnet/SSH 账号默认留空，仅从设置中读取（密码永不回传明文）
         'username': _get_setting('username', ''),
-        'password': _get_setting('password', ''),
+        'password': '',
+        'password_configured': _setting_has_secret_value('password'),
         'system_name': _get_setting('system_name', '配置备份中心'),
         'backup_frequency': _get_setting('backup_frequency', 'daily') or 'daily',
         'default_connection_type': _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'SSH',
@@ -4213,7 +4219,8 @@ def get_settings():
         'alert_smtp_host': _get_setting('alert_smtp_host', ''),
         'alert_smtp_port': _get_setting('alert_smtp_port', '587'),
         'alert_smtp_user': _get_setting('alert_smtp_user', ''),
-        'alert_smtp_password': _get_setting('alert_smtp_password', ''),
+        'alert_smtp_password': '',
+        'alert_smtp_password_configured': _setting_has_secret_value('alert_smtp_password'),
         'alert_smtp_from': _get_setting('alert_smtp_from', ''),
         'alert_smtp_use_tls': _get_setting('alert_smtp_use_tls', '1'),
         'alert_email_to': _get_setting('alert_email_to', ''),
@@ -4221,7 +4228,8 @@ def get_settings():
         'alert_on_backup_fail_webhook': _get_setting('alert_on_backup_fail_webhook', '1'),
         'alert_on_discovery_new_email': _get_setting('alert_on_discovery_new_email', '0'),
         'alert_on_discovery_new_webhook': _get_setting('alert_on_discovery_new_webhook', '0'),
-        'api_tokens': _get_setting('api_tokens', ''),
+        'api_tokens': '',
+        'api_tokens_configured': _setting_has_secret_value('api_tokens'),
         # 自动发现设置
         'discovery_frequency': _get_setting('discovery_frequency', 'twice_daily'),
         'discovery_type_keywords': discovery_type_keywords,
@@ -4236,7 +4244,8 @@ def get_settings():
         'ldap_server': _get_setting('ldap_server', ''),
         'ldap_base_dn': _get_setting('ldap_base_dn', ''),
         'ldap_bind_dn': _get_setting('ldap_bind_dn', ''),
-        'ldap_bind_password': _get_setting('ldap_bind_password', ''),
+        'ldap_bind_password': '',
+        'ldap_bind_password_configured': _setting_has_secret_value('ldap_bind_password'),
         'ldap_user_filter': _get_setting('ldap_user_filter', '(uid={username})'),
         'can_edit_settings': _can_edit_settings(),
     })
@@ -4530,8 +4539,11 @@ def update_settings():
     data = request.get_json(force=True, silent=True) or {}
     if data.get('username') is not None:
         _set_setting('username', str(data['username']))
-    if data.get('password') is not None:
-        _set_setting('password', str(data['password']))
+    # 全局默认密码：GET 不返回明文；忽略仅含空串的旧客户端提交，避免误清空
+    if data.get('password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
+        _set_setting('password', '')
+    elif str(data.get('password') or '').strip():
+        _set_setting('password', str(data.get('password') or '').strip())
     if data.get('backup_frequency') is not None:
         _set_setting('backup_frequency', str(data['backup_frequency']))
     if data.get('default_connection_type') is not None:
@@ -4569,9 +4581,10 @@ def update_settings():
         _set_setting('ldap_base_dn', str(data.get('ldap_base_dn') or '').strip())
     if 'ldap_bind_dn' in data:
         _set_setting('ldap_bind_dn', str(data.get('ldap_bind_dn') or '').strip())
-    if 'ldap_bind_password' in data:
-        # 不做特殊加密，后续可考虑集成密钥管理
-        _set_setting('ldap_bind_password', str(data.get('ldap_bind_password') or ''))
+    if data.get('ldap_bind_password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
+        _set_setting('ldap_bind_password', '')
+    elif str(data.get('ldap_bind_password') or '').strip():
+        _set_setting('ldap_bind_password', str(data.get('ldap_bind_password') or '').strip())
     if 'ldap_user_filter' in data:
         _set_setting('ldap_user_filter', str(data.get('ldap_user_filter') or '(uid={username})').strip())
     # 通用：会话与安全
@@ -4645,9 +4658,13 @@ def update_settings():
     if 'alert_webhook_url' in data:
         _set_setting('alert_webhook_url', (str(data.get('alert_webhook_url') or '').strip())[:512])
     # 告警设置
-    for key in ('alert_smtp_host', 'alert_smtp_user', 'alert_smtp_password', 'alert_smtp_from', 'alert_email_to'):
+    for key in ('alert_smtp_host', 'alert_smtp_user', 'alert_smtp_from', 'alert_email_to'):
         if key in data:
             _set_setting(key, str(data.get(key) or '').strip()[:256])
+    if data.get('alert_smtp_password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
+        _set_setting('alert_smtp_password', '')
+    elif str(data.get('alert_smtp_password') or '').strip():
+        _set_setting('alert_smtp_password', str(data.get('alert_smtp_password') or '').strip()[:256])
     if 'alert_smtp_port' in data:
         try:
             n = int(data.get('alert_smtp_port') or '587')
@@ -4659,7 +4676,9 @@ def update_settings():
     for key in ('alert_on_backup_fail_email', 'alert_on_backup_fail_webhook', 'alert_on_discovery_new_email', 'alert_on_discovery_new_webhook'):
         if key in data:
             _set_setting(key, '1' if data.get(key) in (True, 1, '1', 'true', 'on') else '0')
-    if 'api_tokens' in data:
+    if data.get('api_tokens_clear') in (True, 1, '1', 'true', 'on', 'yes'):
+        _set_setting('api_tokens', '')
+    elif str(data.get('api_tokens') or '').strip():
         _set_setting('api_tokens', (str(data.get('api_tokens') or '').strip())[:1024])
 
     # 自动发现 / SNMP 全局设置

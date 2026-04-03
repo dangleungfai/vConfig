@@ -4051,12 +4051,21 @@ document.getElementById('btn-user-save')?.addEventListener('click', async () => 
 async function loadSettings() {
     const res = await fetch(`${API}/settings`);
     const d = await res.json();
+    window.__settingsSecretDirty = { password: false, smtp: false, ldap: false, apiTokens: false };
     const draft = readSettingsDraft();
     const pick = (key, fallback) => (draft[key] !== undefined ? draft[key] : fallback);
     const sysNameEl = document.getElementById('setting-system-name');
     if (sysNameEl) sysNameEl.value = pick('system_name', d.system_name || '配置备份中心');
     document.getElementById('setting-username').value = pick('username', d.username || '');
-    document.getElementById('setting-password').value = pick('password', d.password || '');
+    const settingPwdEl = document.getElementById('setting-password');
+    if (settingPwdEl) {
+        settingPwdEl.value = pick('password', d.password || '');
+        if (d.password_configured && window.t) {
+            settingPwdEl.placeholder = window.t('placeholder_secret_saved_keep_empty');
+        } else if (window.t) {
+            settingPwdEl.placeholder = window.t('placeholder_password');
+        }
+    }
     const connEl = document.getElementById('setting-default-connection-type');
     if (connEl) connEl.value = (pick('default_connection_type', d.default_connection_type || 'TELNET') || 'TELNET').toUpperCase();
     const retentionEl = document.getElementById('setting-retention-days');
@@ -4112,14 +4121,31 @@ async function loadSettings() {
         ['setting-alert-discovery-webhook', 'alert_on_discovery_new_webhook', '0'],
     ];
     alertFields.forEach(([id, key, defVal]) => {
+        if (id === 'setting-alert-smtp-password') return;
         const el = document.getElementById(id);
         if (!el) return;
         const v = pick(key, d[key] ?? (defVal || ''));
         if (el.type === 'checkbox') el.checked = (v === '1' || v === true);
         else el.value = v || '';
     });
+    const smtpPwdEl = document.getElementById('setting-alert-smtp-password');
+    if (smtpPwdEl) {
+        smtpPwdEl.value = pick('alert_smtp_password', d.alert_smtp_password || '');
+        if (d.alert_smtp_password_configured && window.t) {
+            smtpPwdEl.placeholder = window.t('placeholder_secret_saved_keep_empty');
+        } else if (window.t) {
+            smtpPwdEl.placeholder = window.t('placeholder_alert_smtp_password');
+        }
+    }
     const apiTokensEl = document.getElementById('setting-api-tokens');
-    if (apiTokensEl) apiTokensEl.value = pick('api_tokens', d.api_tokens || '');
+    if (apiTokensEl) {
+        apiTokensEl.value = pick('api_tokens', d.api_tokens || '');
+        if (d.api_tokens_configured && window.t) {
+            apiTokensEl.placeholder = window.t('placeholder_secret_saved_keep_empty');
+        } else if (window.t) {
+            apiTokensEl.placeholder = window.t('placeholder_api_tokens');
+        }
+    }
     const ldapEnabledEl = document.getElementById('setting-ldap-enabled');
     if (ldapEnabledEl) ldapEnabledEl.checked = (pick('ldap_enabled', d.ldap_enabled || '0') === '1');
     const ldapServerEl = document.getElementById('setting-ldap-server');
@@ -4129,7 +4155,14 @@ async function loadSettings() {
     const ldapBindDnEl = document.getElementById('setting-ldap-bind-dn');
     if (ldapBindDnEl) ldapBindDnEl.value = pick('ldap_bind_dn', d.ldap_bind_dn || '');
     const ldapBindPwdEl = document.getElementById('setting-ldap-bind-password');
-    if (ldapBindPwdEl) ldapBindPwdEl.value = pick('ldap_bind_password', d.ldap_bind_password || '');
+    if (ldapBindPwdEl) {
+        ldapBindPwdEl.value = pick('ldap_bind_password', d.ldap_bind_password || '');
+        if (d.ldap_bind_password_configured && window.t) {
+            ldapBindPwdEl.placeholder = window.t('placeholder_secret_saved_keep_empty');
+        } else if (window.t) {
+            ldapBindPwdEl.placeholder = window.t('placeholder_ldap_bind_password');
+        }
+    }
     const ldapUserFilterEl = document.getElementById('setting-ldap-user-filter');
     if (ldapUserFilterEl) ldapUserFilterEl.value = pick('ldap_user_filter', d.ldap_user_filter || '');
     // SNMP / 自动发现
@@ -4304,6 +4337,21 @@ async function loadSettings() {
     } else {
         try { window.__canEditSettings = true; } catch (e) {}
     }
+    const bindSettingsSecretInput = (elementId, dirtyKey) => {
+        const el = document.getElementById(elementId);
+        if (!el || el.dataset.vcSecretBound === '1') return;
+        el.dataset.vcSecretBound = '1';
+        const mark = () => {
+            if (!window.__settingsSecretDirty) window.__settingsSecretDirty = {};
+            window.__settingsSecretDirty[dirtyKey] = true;
+        };
+        el.addEventListener('input', mark);
+        el.addEventListener('change', mark);
+    };
+    bindSettingsSecretInput('setting-password', 'password');
+    bindSettingsSecretInput('setting-alert-smtp-password', 'smtp');
+    bindSettingsSecretInput('setting-ldap-bind-password', 'ldap');
+    bindSettingsSecretInput('setting-api-tokens', 'apiTokens');
 }
 document.getElementById('btn-reset-settings-defaults')?.addEventListener('click', async () => {
     if (!confirm('确定要将所有系统设置恢复为系统默认参数值吗？当前自定义设置（含备份账号、备份频率、Logo 等）将被覆盖。')) return;
@@ -4379,13 +4427,14 @@ document.getElementById('btn-db-restore')?.addEventListener('click', async () =>
 document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
     const retentionEl = document.getElementById('setting-retention-days');
     const retentionVal = retentionEl ? parseInt(retentionEl.value, 10) : 30;
-    const res = await fetch(`${API}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    const dirty = window.__settingsSecretDirty || {};
+    const secretPwd = (document.getElementById('setting-password')?.value || '').trim();
+    const secretSmtp = (document.getElementById('setting-alert-smtp-password')?.value || '').trim();
+    const secretLdap = (document.getElementById('setting-ldap-bind-password')?.value || '').trim();
+    const secretApiTok = (document.getElementById('setting-api-tokens')?.value || '').trim();
+    const payload = {
             system_name: document.getElementById('setting-system-name')?.value || '',
             username: document.getElementById('setting-username').value,
-            password: document.getElementById('setting-password').value,
             backup_frequency: getBackupFrequencySaveValue(),
             default_connection_type: document.getElementById('setting-default-connection-type').value,
             backup_retention_days: isNaN(retentionVal) ? 30 : Math.max(0, Math.min(3650, retentionVal)),
@@ -4412,7 +4461,6 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
         alert_smtp_host: (document.getElementById('setting-alert-smtp-host')?.value || '').trim(),
         alert_smtp_port: parseInt(document.getElementById('setting-alert-smtp-port')?.value, 10) || 587,
         alert_smtp_user: (document.getElementById('setting-alert-smtp-user')?.value || '').trim(),
-        alert_smtp_password: (document.getElementById('setting-alert-smtp-password')?.value || '').trim(),
         alert_smtp_from: (document.getElementById('setting-alert-smtp-from')?.value || '').trim(),
         alert_smtp_use_tls: document.getElementById('setting-alert-smtp-tls')?.checked ? '1' : '0',
         alert_email_to: (document.getElementById('setting-alert-email-to')?.value || '').trim(),
@@ -4420,7 +4468,6 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
         alert_on_backup_fail_webhook: document.getElementById('setting-alert-backup-fail-webhook')?.checked ? '1' : '0',
         alert_on_discovery_new_email: document.getElementById('setting-alert-discovery-email')?.checked ? '1' : '0',
         alert_on_discovery_new_webhook: document.getElementById('setting-alert-discovery-webhook')?.checked ? '1' : '0',
-            api_tokens: (document.getElementById('setting-api-tokens')?.value || '').trim(),
             // 自动发现 / SNMP 全局设置
             snmp_version: document.getElementById('setting-snmp-version')?.value || '2c',
             snmp_community: (document.getElementById('setting-snmp-community')?.value || '').trim() || 'public',
@@ -4436,9 +4483,36 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
             ldap_server: document.getElementById('setting-ldap-server')?.value || '',
             ldap_base_dn: document.getElementById('setting-ldap-base-dn')?.value || '',
             ldap_bind_dn: document.getElementById('setting-ldap-bind-dn')?.value || '',
-            ldap_bind_password: document.getElementById('setting-ldap-bind-password')?.value || '',
             ldap_user_filter: document.getElementById('setting-ldap-user-filter')?.value || ''
-        })
+    };
+    if (dirty.password) {
+        if (secretPwd) payload.password = secretPwd;
+        else payload.password_clear = true;
+    } else if (secretPwd) {
+        payload.password = secretPwd;
+    }
+    if (dirty.smtp) {
+        if (secretSmtp) payload.alert_smtp_password = secretSmtp;
+        else payload.alert_smtp_password_clear = true;
+    } else if (secretSmtp) {
+        payload.alert_smtp_password = secretSmtp;
+    }
+    if (dirty.ldap) {
+        if (secretLdap) payload.ldap_bind_password = secretLdap;
+        else payload.ldap_bind_password_clear = true;
+    } else if (secretLdap) {
+        payload.ldap_bind_password = secretLdap;
+    }
+    if (dirty.apiTokens) {
+        if (secretApiTok) payload.api_tokens = secretApiTok;
+        else payload.api_tokens_clear = true;
+    } else if (secretApiTok) {
+        payload.api_tokens = secretApiTok;
+    }
+    const res = await fetch(`${API}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
     if (res.ok) {
         const lang = (document.getElementById('setting-language') && document.getElementById('setting-language').value) || 'zh';
@@ -4449,6 +4523,8 @@ document.getElementById('btn-save-settings')?.addEventListener('click', async ()
         if (window.__LANG !== lang) {
             window.__LANG = lang;
             window.location.reload();
+        } else {
+            loadSettings();
         }
     }
 });
