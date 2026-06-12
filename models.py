@@ -461,3 +461,79 @@ class AutoDiscoveryJob(db.Model):
             'error': self.error or '',
             'log_id': self.log_id,
         }
+
+
+class ConfigResourceParseRun(db.Model):
+    """配置资源索引重建记录。"""
+    __tablename__ = 'config_resource_parse_runs'
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(32), default='running', index=True)
+    scanned_files = db.Column(db.Integer, default=0)
+    indexed_interfaces = db.Column(db.Integer, default=0)
+    error = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'started_at': _isoformat_utc(self.started_at),
+            'finished_at': _isoformat_utc(self.finished_at),
+            'status': self.status,
+            'scanned_files': self.scanned_files,
+            'indexed_interfaces': self.indexed_interfaces,
+            'error': self.error or '',
+        }
+
+
+class ConfigResourceInterface(db.Model):
+    """从设备配置解析出的接口级资源索引。"""
+    __tablename__ = 'config_resource_interfaces'
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey('devices.id'), nullable=True, index=True)
+    device_profile = db.Column(db.String(32), nullable=True, index=True)
+    device_model = db.Column(db.String(64), nullable=True)
+    gateway = db.Column(db.String(128), nullable=False, index=True)
+    interface_name = db.Column(db.String(128), nullable=False, index=True)
+    interface_description = db.Column(db.Text, nullable=True)
+    vrf_name = db.Column(db.String(128), nullable=True, index=True)
+    pe_address = db.Column(db.String(64), nullable=True, index=True)
+    secondary_ip = db.Column(db.Text, nullable=True)
+    vlan_id = db.Column(db.String(64), nullable=True, index=True)
+    tunnel_source = db.Column(db.String(64), nullable=True)
+    tunnel_destination = db.Column(db.String(64), nullable=True)
+    bandwidth = db.Column(db.String(128), nullable=True)
+    qos_policy = db.Column(db.Text, nullable=True)
+    remote_as = db.Column(db.Text, nullable=True)
+    backup_name = db.Column(db.String(128), nullable=True)
+    load_balance = db.Column(db.String(128), nullable=True)
+    customer_info = db.Column(db.Text, nullable=True)
+    config_path = db.Column(db.String(512), nullable=True)
+    config_mtime = db.Column(db.DateTime, nullable=True)
+    parsed_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'device_id': self.device_id,
+            'device_profile': self.device_profile or '',
+            'device_model': self.device_model or '',
+            'gateway': self.gateway,
+            'interface_name': self.interface_name,
+            'interface_description': self.interface_description or '',
+            'vrf_name': self.vrf_name or '',
+            'pe_address': self.pe_address or '',
+            'secondary_ip': self.secondary_ip or '',
+            'vlan_id': self.vlan_id or '',
+            'tunnel_source': self.tunnel_source or '',
+            'tunnel_destination': self.tunnel_destination or '',
+            'bandwidth': self.bandwidth or '',
+            'qos_policy': self.qos_policy or '',
+            'remote_as': self.remote_as or '',
+            'backup_name': self.backup_name or '',
+            'load_balance': self.load_balance or '',
+            'customer_info': self.customer_info or '',
+            'config_path': self.config_path or '',
+            'config_mtime': _isoformat_utc(self.config_mtime),
+            'parsed_at': _isoformat_utc(self.parsed_at),
+        }

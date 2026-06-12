@@ -294,6 +294,7 @@ function showTab(name) {
     }
     if (name === 'dashboard') loadDashboard();
     if (name === 'devices') { loadDevices(); refreshDeviceTypeOptions().catch(() => {}); }
+    if (name === 'resources') loadResources();
     if (name === 'backup') loadBackupStatus();
     if (name === 'logs') {
         const hash = location.hash || '';
@@ -359,6 +360,178 @@ function toast(message, type) {
     el.textContent = message;
     container.appendChild(el);
     setTimeout(() => el.remove(), 3500);
+}
+
+// 配置资源索引
+let resourcePage = 1;
+let resourcePerPage = 50;
+
+function resourceParams(includePaging) {
+    const params = new URLSearchParams();
+    const filters = [
+        ['gateway', 'resource-filter-gateway'],
+        ['interface_name', 'resource-filter-interface'],
+        ['interface_description', 'resource-filter-desc'],
+        ['vrf_name', 'resource-filter-vrf'],
+        ['pe_address', 'resource-filter-ip'],
+        ['customer_info', 'resource-filter-customer'],
+    ];
+    filters.forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        const value = el ? el.value.trim() : '';
+        if (value) params.set(key, value);
+    });
+    if (includePaging) {
+        params.set('page', String(resourcePage));
+        params.set('per_page', String(resourcePerPage));
+    }
+    return params;
+}
+
+function setResourceStat(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value == null || value === '' ? '--' : String(value);
+}
+
+async function loadResources() {
+    if (!document.getElementById('panel-resources')) return;
+    await Promise.all([loadResourceSummary(), loadResourceSearch()]);
+}
+
+async function loadResourceSummary() {
+    const tbody = document.getElementById('resource-summary-list');
+    if (!tbody) return;
+    try {
+        const res = await fetch(`${API}/config-resources/summary`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '加载资源统计失败');
+        setResourceStat('resource-stat-gateways', data.total_gateways ?? 0);
+        setResourceStat('resource-stat-interfaces', data.total_interfaces ?? 0);
+        const run = data.latest_run || null;
+        setResourceStat('resource-stat-files', run ? (run.scanned_files ?? 0) : 0);
+        setResourceStat('resource-stat-run', run && run.finished_at ? formatInTimezone(run.finished_at, footerTimezone) : (run ? run.status : '--'));
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4">暂无索引数据，请点击“重建索引”。</td></tr>';
+            return;
+        }
+        tbody.innerHTML = items.slice(0, 200).map(item => `
+            <tr>
+                <td>${escapeHtml(item.gateway || '')}</td>
+                <td>${escapeHtml(item.device_profile || '')}</td>
+                <td>${escapeHtml(item.device_model || '')}</td>
+                <td>${escapeHtml(item.count ?? 0)}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.warn('loadResourceSummary failed', e);
+        tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(e.message || '加载失败')}</td></tr>`;
+    }
+}
+
+async function loadResourceSearch() {
+    const tbody = document.getElementById('resource-list');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="9">加载中...</td></tr>';
+    try {
+        const params = resourceParams(true);
+        const res = await fetch(`${API}/config-resources/search?${params.toString()}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '加载资源列表失败');
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="9">暂无匹配资源。</td></tr>';
+        } else {
+            tbody.innerHTML = items.map(item => {
+                const configPath = item.config_path || '';
+                const fileName = configPath.split(/[\\/]/).pop() || configPath;
+                return `
+                    <tr>
+                        <td>${escapeHtml(item.gateway || '')}</td>
+                        <td>${escapeHtml(item.interface_name || '')}</td>
+                        <td>${escapeHtml(item.interface_description || '')}</td>
+                        <td>${escapeHtml(item.vrf_name || '')}</td>
+                        <td>${escapeHtml(item.pe_address || '')}</td>
+                        <td>${escapeHtml(item.vlan_id || '')}</td>
+                        <td>${escapeHtml(item.remote_as || '')}</td>
+                        <td>${escapeHtml(item.customer_info || '')}</td>
+                        <td title="${escapeHtml(configPath)}">${escapeHtml(fileName)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        renderResourcePagination(data.total || 0, data.page || resourcePage, data.per_page || resourcePerPage);
+    } catch (e) {
+        console.warn('loadResourceSearch failed', e);
+        tbody.innerHTML = `<tr><td colspan="9">${escapeHtml(e.message || '加载失败')}</td></tr>`;
+        renderResourcePagination(0, 1, resourcePerPage);
+    }
+}
+
+function renderResourcePagination(total, page, perPage) {
+    const el = document.getElementById('resource-pagination');
+    if (!el) return;
+    const totalPages = Math.max(1, Math.ceil((total || 0) / perPage));
+    resourcePage = Math.min(Math.max(1, page), totalPages);
+    const totalText = window.t ? window.t('pagination_total').replace('{n}', total || 0) : `共 ${total || 0} 条`;
+    const prevText = window.t ? window.t('pagination_prev') : '上一页';
+    const nextText = window.t ? window.t('pagination_next') : '下一页';
+    el.innerHTML = `
+        <button type="button" class="btn btn-secondary btn-sm" data-resource-page="${resourcePage - 1}" ${resourcePage <= 1 ? 'disabled' : ''}>${prevText}</button>
+        <span>${escapeHtml(totalText)}，${resourcePage}/${totalPages}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-resource-page="${resourcePage + 1}" ${resourcePage >= totalPages ? 'disabled' : ''}>${nextText}</button>
+    `;
+}
+
+function initResourceIndexHandlers() {
+    document.getElementById('btn-resource-search')?.addEventListener('click', () => {
+        resourcePage = 1;
+        loadResourceSearch();
+    });
+    ['resource-filter-gateway', 'resource-filter-interface', 'resource-filter-desc', 'resource-filter-vrf', 'resource-filter-ip', 'resource-filter-customer'].forEach(id => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                resourcePage = 1;
+                loadResourceSearch();
+            }
+        });
+    });
+    document.getElementById('resource-per-page')?.addEventListener('change', e => {
+        resourcePerPage = parseInt(e.target.value, 10) || 50;
+        resourcePage = 1;
+        loadResourceSearch();
+    });
+    document.getElementById('resource-pagination')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-resource-page]');
+        if (!btn || btn.disabled) return;
+        resourcePage = parseInt(btn.dataset.resourcePage, 10) || 1;
+        loadResourceSearch();
+    });
+    document.getElementById('btn-resource-export')?.addEventListener('click', () => {
+        const params = resourceParams(false);
+        const qs = params.toString();
+        window.location.href = `${API}/config-resources/export${qs ? '?' + qs : ''}`;
+    });
+    document.getElementById('btn-resource-rebuild')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-resource-rebuild');
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = window.t ? window.t('resource_rebuilding') : '重建中...';
+        try {
+            const res = await fetch(`${API}/config-resources/rebuild`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '重建失败');
+            toast(window.t ? window.t('toast_resource_rebuilt') : '资源索引已重建', 'success');
+            resourcePage = 1;
+            await loadResources();
+        } catch (e) {
+            toast(e.message || (window.t ? window.t('toast_operation_failed') : '操作失败'), 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    });
 }
 
 // 仪表盘
@@ -1122,6 +1295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     startFooterTimeTicker();
     applyDashboardCardOrder();
     initDashboardCardDrag();
+    initResourceIndexHandlers();
     if (document.getElementById('panel-config-device')) initConfigDevicePanelHandlers();
     const hash = (location.hash || '').replace(/^#/, '');
     if (hash === 'config-changes') {

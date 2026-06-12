@@ -22,6 +22,7 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
 | **已备份配置** | 按设备浏览配置文件列表，支持下载、版本对比（最新 vs 上一份）、单设备历史与 diff |
 | **配置变动** | 集中展示最近一次备份中各设备的配置变动（新增/删除命令），支持按设备查看明细 |
 | **配置全文搜索** | 在已备份配置中按关键字搜索 |
+| **配置资源索引** | 扫描本地最新备份配置，提取接口、VRF、互联地址、VLAN、BGP AS 与客户信息，支持检索、统计与 CSV 导出 |
 | **合规检查** | 基于规则的配置合规检测（可选模块） |
 
 ### 安全与权限
@@ -77,7 +78,7 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
 ```
 
 - **Web 层**：`app.py` 负责应用初始化、会话权限、调度器与后台任务入口；`blueprints/` 按业务域拆分页面与 REST API。
-- **业务层**：设备 CRUD、配置文件、用户、设备类型、系统设置、日志与报表等 API 已拆分为独立 blueprint；备份任务调度、Webhook 通知、终端会话等运行态逻辑仍由应用入口协调。
+- **业务层**：设备 CRUD、配置文件、配置资源索引、用户、设备类型、系统设置、日志与报表等 API 已拆分为独立 blueprint；备份任务调度、Webhook 通知、终端会话等运行态逻辑仍由应用入口协调。
 - **备份与驱动层**：`backup_service` 通过 SSH/Telnet 连接设备，按 `device_drivers` 中各厂商的登录流程与命令执行配置拉取。
 - **数据层**：MariaDB 存储设备、用户、设置、备份任务与日志；配置文件按设备落盘至 `data/configs/`。
 
@@ -91,12 +92,14 @@ vConfig/
 │   ├── device_inventory.py / device_groups.py / device_types.py
 │   ├── settings_core.py / settings_assets.py / settings_ops.py
 │   ├── config_files.py # 配置文件浏览、下载、搜索、diff 与合规检查
+│   ├── config_resources.py # 从备份配置解析资源索引、统计与导出
 │   ├── backup_logs.py  # 备份日志与单设备历史
 │   ├── reports.py      # CSV 报表导出
 │   └── pages.py        # 首页、配置详情跳转与页脚信息
 ├── config.py           # 默认配置（数据目录、数据库、默认备份账号等）
 ├── models.py           # 数据模型（设备、用户、设置、备份任务等）
 ├── backup_service.py   # 备份执行逻辑（SSH/Telnet 连接与命令执行）
+├── resource_indexer.py # 配置资源索引解析器
 ├── compliance.py       # 合规检查模块
 ├── device_drivers/     # 设备类型驱动（Cisco、Juniper、Huawei、H3C、RouterOS 及通用/自定义）
 ├── requirements.txt    # Python 依赖

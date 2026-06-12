@@ -27,6 +27,7 @@ from backup_service import run_single_backup, test_connection, run_backup_task
 from blueprints.auth import create_auth_blueprint
 from blueprints.backup_logs import create_backup_logs_blueprint
 from blueprints.config_files import ConfigFilesService, create_config_files_blueprint
+from blueprints.config_resources import create_config_resources_blueprint
 from blueprints.device_groups import create_device_groups_blueprint
 from blueprints.device_inventory import create_device_inventory_blueprint
 from blueprints.device_types import create_device_types_blueprint
@@ -3224,6 +3225,14 @@ config_files_service = ConfigFilesService({
     'logger': app.logger,
 })
 app.register_blueprint(create_config_files_blueprint(config_files_service))
+
+app.register_blueprint(create_config_resources_blueprint({
+    'configs_dir': CONFIGS_DIR,
+    'can_edit_settings': _can_edit_settings,
+    'ensure_tables': _ensure_tables,
+    'app_context': app.app_context,
+    'write_audit': _write_audit,
+}))
 
 app.register_blueprint(create_users_blueprint({
     'can_edit_settings': _can_edit_settings,

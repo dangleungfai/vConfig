@@ -142,6 +142,94 @@
     </div>
 </div>
 
+<!-- 配置资源索引：从本地备份配置解析 PE/接口/VRF/BGP 等资源 -->
+<div id="panel-resources" class="panel">
+    <header class="panel-header">
+        <div>
+            <h2 data-i18n="panel_resources">配置资源索引</h2>
+            <p class="form-hint" style="margin-top:0.25rem;" data-i18n="resources_hint">扫描本地最新备份配置，提取接口、VRF、地址、VLAN、BGP AS、客户等信息，替代旧 PE 信息表。</p>
+        </div>
+        <div class="panel-actions">
+            <button type="button" class="btn btn-primary" id="btn-resource-rebuild" data-i18n="btn_resource_rebuild">重建索引</button>
+            <button type="button" class="btn btn-secondary" id="btn-resource-export" data-i18n="btn_export">导出</button>
+        </div>
+    </header>
+    <div class="stats-cards" id="resource-stats">
+        <div class="stat-card">
+            <div class="stat-value" id="resource-stat-gateways">--</div>
+            <div class="stat-label" data-i18n="resource_gateways">网关/PE</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="resource-stat-interfaces">--</div>
+            <div class="stat-label" data-i18n="resource_interfaces">资源接口</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="resource-stat-files">--</div>
+            <div class="stat-label" data-i18n="resource_scanned_files">扫描文件</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="resource-stat-run">--</div>
+            <div class="stat-label" data-i18n="resource_latest_run">最近重建</div>
+        </div>
+    </div>
+    <div class="filters-bar">
+        <input type="text" id="resource-filter-gateway" data-i18n-placeholder="resource_filter_gateway" placeholder="PE/POP 名称">
+        <input type="text" id="resource-filter-interface" data-i18n-placeholder="resource_filter_interface" placeholder="接口名称">
+        <input type="text" id="resource-filter-desc" data-i18n-placeholder="resource_filter_desc" placeholder="接口备注/服务编号">
+        <input type="text" id="resource-filter-vrf" data-i18n-placeholder="resource_filter_vrf" placeholder="VRF">
+        <input type="text" id="resource-filter-ip" data-i18n-placeholder="resource_filter_ip" placeholder="PE互联地址">
+        <input type="text" id="resource-filter-customer" data-i18n-placeholder="resource_filter_customer" placeholder="客户信息">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-resource-search" data-i18n="btn_search">搜索</button>
+    </div>
+    <div class="table-wrap">
+        <table class="table" id="resource-table">
+            <thead>
+                <tr>
+                    <th data-i18n="resource_th_gateway">PE名称</th>
+                    <th data-i18n="resource_th_interface">接口</th>
+                    <th data-i18n="resource_th_desc">接口备注</th>
+                    <th data-i18n="resource_th_vrf">VRF</th>
+                    <th data-i18n="resource_th_ip">PE互联地址</th>
+                    <th data-i18n="resource_th_vlan">VLAN</th>
+                    <th data-i18n="resource_th_as">CE AS</th>
+                    <th data-i18n="resource_th_customer">客户信息</th>
+                    <th data-i18n="resource_th_config">配置文件</th>
+                </tr>
+            </thead>
+            <tbody id="resource-list"></tbody>
+        </table>
+    </div>
+    <div class="devices-footer">
+        <div class="pagination" id="resource-pagination"></div>
+        <div class="per-page">
+            <span data-i18n="per_page">每页</span>
+            <select id="resource-per-page">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+            </select>
+            <span data-i18n="resource_rows">条</span>
+        </div>
+    </div>
+    <section class="dashboard-card" style="margin-top:1rem;">
+        <h3 class="dashboard-card-title" data-i18n="resource_summary_title">PE 数量统计</h3>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th data-i18n="resource_th_gateway">PE名称</th>
+                        <th data-i18n="th_device_type">设备类型</th>
+                        <th data-i18n="resource_th_model">设备型号</th>
+                        <th data-i18n="resource_th_count">接口数量</th>
+                    </tr>
+                </thead>
+                <tbody id="resource-summary-list"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
 <div id="panel-devices" class="panel">
     <header class="panel-header">
         <h2 data-i18n="panel_device_list">设备列表</h2>

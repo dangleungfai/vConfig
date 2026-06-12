@@ -9,6 +9,7 @@ from unittest.mock import patch
 import backup_service
 import config
 from models import normalize_user_role
+from resource_indexer import parse_config_resources
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,6 +30,11 @@ class CoreBehaviorTests(unittest.TestCase):
         self.assertEqual(rules.get('/api/configs/devices'), ['config_files.list_configs_by_devices'])
         self.assertEqual(rules.get('/api/dashboard/config-changes'), ['config_files.dashboard_config_changes'])
         self.assertEqual(rules.get('/api/search/configs'), ['config_files.search_configs'])
+        self.assertEqual(rules.get('/api/config-resources/summary'), ['config_resources.resource_summary'])
+        self.assertEqual(rules.get('/api/config-resources/detail/<path:gateway>'), ['config_resources.resource_detail'])
+        self.assertEqual(rules.get('/api/config-resources/search'), ['config_resources.resource_search'])
+        self.assertEqual(rules.get('/api/config-resources/export'), ['config_resources.resource_export'])
+        self.assertEqual(rules.get('/api/config-resources/rebuild'), ['config_resources.resource_rebuild'])
         self.assertEqual(set(rules.get('/api/users', [])), {'users.list_users_api', 'users.create_user_api'})
         self.assertEqual(set(rules.get('/api/users/<int:user_id>', [])), {'users.update_user_api', 'users.delete_user_api'})
         self.assertEqual(set(rules.get('/api/device-types', [])), {'device_types.list_device_types_api', 'device_types.create_device_type_api'})
@@ -101,6 +107,37 @@ class CoreBehaviorTests(unittest.TestCase):
                 config._database_uri(),
                 'mysql+pymysql://vconfig:vconfig@localhost:3306/vconfig',
             )
+
+    def test_parse_config_resources_extracts_interface_resource_fields(self):
+        text = '''
+interface GigabitEthernet0/0/1.100
+ description 9809-CUST-A Example Customer
+ encapsulation dot1Q 100
+ ip vrf forwarding VRF-A
+ ip address 10.0.0.1 255.255.255.248
+ ip address 10.0.0.2 255.255.255.248 secondary
+ bandwidth 100000
+!
+router bgp 9809
+ address-family ipv4 vrf VRF-A
+  neighbor 10.0.0.6 remote-as 64510
+!
+'''
+        rows = parse_config_resources(text, gateway='pe-a', device_profile='Cisco')
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row['gateway'], 'pe-a')
+        self.assertEqual(row['device_profile'], 'Cisco')
+        self.assertEqual(row['interface_name'], 'GigabitEthernet0/0/1.100')
+        self.assertEqual(row['interface_description'], '9809-CUST-A Example Customer')
+        self.assertEqual(row['vrf_name'], 'VRF-A')
+        self.assertEqual(row['pe_address'], '10.0.0.1')
+        self.assertEqual(row['secondary_ip'], '10.0.0.2')
+        self.assertEqual(row['vlan_id'], '100')
+        self.assertEqual(row['bandwidth'], '100000')
+        self.assertEqual(row['remote_as'], '64510')
+        self.assertEqual(row['customer_info'], 'Example Customer')
 
     def test_run_backup_task_honors_max_workers(self):
         active = 0
