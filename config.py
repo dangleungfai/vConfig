@@ -10,22 +10,21 @@ CONFIGS_DIR = os.path.join(DATA_ROOT, 'configs')
 LOG_DIR = os.path.join(DATA_ROOT, 'log')
 CERTS_DIR = os.path.join(DATA_ROOT, 'certs')  # HTTPS 自签名证书目录
 
-# 数据库：优先 DATABASE_URL；若未设置则看 MARIADB_*，有则用 MariaDB，否则 SQLite
+# 数据库：仅支持 MariaDB/MySQL。优先 DATABASE_URL；未设置时使用 MARIADB_* 或默认值。
 def _database_uri():
     url = os.environ.get('DATABASE_URL', '').strip()
     if url:
+        driver = url.split(':', 1)[0].split('+', 1)[0].lower()
+        if driver not in ('mysql', 'mariadb'):
+            raise RuntimeError('vConfig supports MariaDB/MySQL only; DATABASE_URL must use mysql or mariadb.')
         return url
-    # 仅当设置了 MARIADB_PASSWORD 或 MARIADB_USER 等时才用 MariaDB，避免影响未配置用户
-    use_mariadb = os.environ.get('MARIADB_PASSWORD') is not None or os.environ.get('MARIADB_USER', '').strip()
-    if not use_mariadb:
-        return f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
     host = os.environ.get('MARIADB_HOST', 'localhost').strip()
     port = os.environ.get('MARIADB_PORT', '3306').strip()
     user = (os.environ.get('MARIADB_USER', '') or 'vconfig').strip()
-    password = os.environ.get('MARIADB_PASSWORD', '')
+    password = os.environ.get('MARIADB_PASSWORD', 'vconfig')
     database = (os.environ.get('MARIADB_DATABASE', '') or 'vconfig').strip()
     if not host or not user or not database:
-        return f'sqlite:///{os.path.join(BASE_DIR, "vconfig.db")}'
+        raise RuntimeError('MariaDB configuration is incomplete: host, user and database are required.')
     from urllib.parse import quote_plus
     pw_enc = quote_plus(password) if password else ''
     auth = f'{user}:{pw_enc}' if pw_enc else user

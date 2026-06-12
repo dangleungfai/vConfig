@@ -4317,8 +4317,6 @@ async function loadSettings() {
             'btn-reset-settings-defaults',
             'btn-restart-service',
             'btn-db-backup',
-            'btn-db-restore',
-            'db-restore-file',
             'btn-discovery-rule-new',
             'btn-device-type-new',
             'btn-user-new',
@@ -4410,30 +4408,6 @@ document.getElementById('btn-db-backup-confirm')?.addEventListener('click', () =
     if (modal) modal.classList.remove('show');
     window.location.href = `${API}/settings/db/backup`;
     toast(window.t ? window.t('toast_db_downloading') : '正在下载数据库备份…', 'success');
-});
-
-document.getElementById('btn-db-restore')?.addEventListener('click', async () => {
-    const input = document.getElementById('db-restore-file');
-    if (!input?.files?.length) {
-        toast(window.t ? window.t('toast_select_db_file') : '请先选择要恢复的数据库备份文件。', 'warn');
-        return;
-    }
-    if (!confirm('确定要恢复数据库吗？当前数据库将先备份，恢复后会触发服务重启。')) return;
-    const formData = new FormData();
-    formData.append('file', input.files[0]);
-    try {
-        const res = await fetch(`${API}/settings/db/restore`, { method: 'POST', body: formData });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-            toast(data.error || (window.t ? window.t('toast_restore_failed') : '恢复失败，请稍后重试。'), 'error');
-            return;
-        }
-        toast(window.t ? window.t('toast_db_restored') : '数据库已恢复，服务将重启，请稍候刷新页面。', 'success');
-        input.value = '';
-        setTimeout(() => { window.location.reload(); }, 3000);
-    } catch (e) {
-        toast(window.t ? window.t('toast_restore_failed_retry') : '恢复请求失败，请稍后重试。', 'error');
-    }
 });
 
 document.getElementById('btn-save-settings')?.addEventListener('click', async () => {

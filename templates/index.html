@@ -767,24 +767,16 @@
                     </div>
                 </div>
 
-                <!-- 数据备份与恢复 -->
+                <!-- 数据备份 -->
                 <section class="settings-section" id="settings-section-db-backup">
-                    <h3 class="settings-subtitle" data-i18n="section_db_backup">数据备份与恢复</h3>
-                    <p class="form-hint" data-i18n="hint_db_backup">备份或恢复系统数据库（设备、设置、用户等）。恢复后需重启服务方可生效。</p>
+                    <h3 class="settings-subtitle" data-i18n="section_db_backup">数据备份</h3>
+                    <p class="form-hint" data-i18n="hint_db_backup">导出 MariaDB/MySQL 数据库 SQL 备份（仅数据库，不含配置文件等）。恢复请使用 mysql 命令或数据库运维工具执行。</p>
                     <div class="form-row">
                         <label data-i18n="label_db_backup">数据库备份</label>
                         <div class="form-row-inline">
                             <button type="button" class="btn btn-secondary" id="btn-db-backup" data-i18n="btn_db_backup">备份数据库</button>
-                            <span class="form-hint" style="margin-left:0.5rem;" data-i18n="hint_db_backup_download">下载当前数据库文件</span>
+                            <span class="form-hint" style="margin-left:0.5rem;" data-i18n="hint_db_backup_download">下载当前 MariaDB/MySQL 数据库 SQL 文件</span>
                         </div>
-                    </div>
-                    <div class="form-row">
-                        <label data-i18n="label_db_restore">数据库恢复</label>
-                        <div class="form-row-inline settings-db-restore-row">
-                            <input type="file" id="db-restore-file" accept=".db,.sqlite,.sqlite3">
-                            <button type="button" class="btn btn-secondary" id="btn-db-restore" data-i18n="btn_db_restore">恢复数据库</button>
-                        </div>
-                        <span class="form-hint" data-i18n="hint_db_restore">选择之前备份的 .db 文件并点击「恢复数据库」，当前数据库会先备份为 .bak 文件。</span>
                     </div>
                 </section>
 

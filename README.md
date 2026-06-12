@@ -65,19 +65,19 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
                     └─────────────────────┬───────────────────┘
                                           │ HTTPS
                     ┌─────────────────────▼───────────────────┐
-                    │              Flask 应用 (app.py)           │
-                    │  路由 / API / 认证 / 权限 / 定时任务调度    │
+                    │        Flask 应用 + Blueprints              │
+                    │  API / 认证 / 权限 / 设置 / 设备 / 日志      │
                     └─────┬──────────────┬──────────────┬───────┘
                           │              │              │
             ┌─────────────▼──┐  ┌────────▼────────┐  ┌──▼─────────────┐
             │   backup_      │  │  device_drivers │  │  models /      │
-            │   service.py   │  │  (Cisco/Juniper │  │  SQLite 数据库  │
+            │   service.py   │  │  (Cisco/Juniper │  │  MariaDB/MySQL  │
             │  SSH/Telnet    │  │  /Huawei/...)   │  │  data/configs  │
             └───────────────┘  └─────────────────┘  └────────────────┘
 ```
 
-- **Web 层**：提供仪表盘、设备管理、备份任务、日志、配置浏览与对比、系统设置等页面及 REST API。
-- **业务层**：Flask 应用负责会话与权限、设备 CRUD、备份任务调度、Webhook 通知、用户与设置管理。
+- **Web 层**：`app.py` 负责应用初始化、会话权限、调度器与后台任务入口；`blueprints/` 按业务域拆分页面与 REST API。
+- **业务层**：设备 CRUD、配置文件、用户、设备类型、系统设置、日志与报表等 API 已拆分为独立 blueprint；备份任务调度、Webhook 通知、终端会话等运行态逻辑仍由应用入口协调。
 - **备份与驱动层**：`backup_service` 通过 SSH/Telnet 连接设备，按 `device_drivers` 中各厂商的登录流程与命令执行配置拉取。
 - **数据层**：MariaDB 存储设备、用户、设置、备份任务与日志；配置文件按设备落盘至 `data/configs/`。
 
@@ -85,7 +85,15 @@ vConfig 是一套面向企业网络运维场景的 **配置备份与变更管理
 
 ```
 vConfig/
-├── app.py              # Flask 应用入口、路由与 API
+├── app.py              # Flask 应用入口、认证中间件、调度器与后台任务协调
+├── blueprints/         # 按业务域拆分的 Flask Blueprint 路由模块
+│   ├── auth.py         # 登录、登出、LDAP 测试
+│   ├── device_inventory.py / device_groups.py / device_types.py
+│   ├── settings_core.py / settings_assets.py / settings_ops.py
+│   ├── config_files.py # 配置文件浏览、下载、搜索、diff 与合规检查
+│   ├── backup_logs.py  # 备份日志与单设备历史
+│   ├── reports.py      # CSV 报表导出
+│   └── pages.py        # 首页、配置详情跳转与页脚信息
 ├── config.py           # 默认配置（数据目录、数据库、默认备份账号等）
 ├── models.py           # 数据模型（设备、用户、设置、备份任务等）
 ├── backup_service.py   # 备份执行逻辑（SSH/Telnet 连接与命令执行）
@@ -96,6 +104,7 @@ vConfig/
 ├── vconfig.service     # systemd 服务单元（run.sh 自动安装）
 ├── templates/          # 页面模板
 ├── static/             # 前端静态资源（JS/CSS）
+├── tests/              # 核心行为与路由注册测试
 └── data/               # 数据目录（可由环境变量指定）
     ├── configs/        # 各设备备份配置文件
     └── log/            # 日志

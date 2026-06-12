@@ -7,6 +7,21 @@ import json
 
 db = SQLAlchemy()
 
+ROLE_ALIASES = {
+    'operator': 'ops',
+    'readonly': 'viewer',
+    'read_only': 'viewer',
+    'read-only': 'viewer',
+}
+VALID_USER_ROLES = {'admin', 'ops', 'viewer'}
+
+
+def normalize_user_role(role: str) -> str:
+    """Normalize legacy role names to the current admin/ops/viewer model."""
+    value = (role or '').strip().lower()
+    value = ROLE_ALIASES.get(value, value)
+    return value if value in VALID_USER_ROLES else 'viewer'
+
 
 def _isoformat_utc(dt):
     """序列化为 ISO 字符串并带 Z 后缀，供前端按 UTC 解析后按设置时区显示"""
@@ -214,7 +229,7 @@ class User(db.Model):
     email = db.Column(db.String(128), nullable=True)
     phone = db.Column(db.String(32), nullable=True)
     source = db.Column(db.String(16), nullable=False, default='local')  # local / ldap
-    role = db.Column(db.String(16), nullable=False, default='readonly')  # admin / operator / readonly
+    role = db.Column(db.String(16), nullable=False, default='viewer')  # admin / ops / viewer
     is_active = db.Column(db.Boolean, default=True)
     allowed_groups = db.Column(db.String(512), nullable=True)  # 可管理设备分组，逗号分隔，空=全部
     password_hash = db.Column(db.String(255), nullable=True)
@@ -243,7 +258,7 @@ class User(db.Model):
             'email': self.email,
             'phone': self.phone,
             'source': self.source,
-            'role': self.role,
+            'role': normalize_user_role(self.role),
             'is_active': self.is_active,
             'allowed_groups': self.allowed_groups,
             'created_at': _isoformat_utc(self.created_at),

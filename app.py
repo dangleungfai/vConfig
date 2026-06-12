@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """配置备份 Web 管理"""
 import os
-import io
-import csv
 import queue
 import uuid
 import base64
@@ -16,17 +14,28 @@ except ImportError:
     _HAS_FCNTL = False  # Windows 无 fcntl，仅进程内锁
 from datetime import datetime, timedelta
 import json
-from flask import Flask, request, jsonify, send_from_directory, render_template, Response, session, redirect, url_for
+from flask import Flask, request, jsonify, Response, session, redirect, url_for
 from config import (
     CONFIGS_DIR, LOG_DIR, DEFAULT_USERNAME, DEFAULT_PASSWORD,
     BACKUP_THREAD_NUM, EXCLUDE_PATTERNS, DEFAULT_CONNECTION_TYPE, SSH_PORT,
     BACKUP_RETENTION_DAYS, DEFAULT_TIMEZONE, DATA_ROOT, CERTS_DIR,
 )
-from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, ConfigChangeRecord, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, AutoDiscoveryJob, AlertLog, _isoformat_utc
+from models import db, Device, BackupLog, AppSetting, BackupJobRun, LoginLog, AuditLog, ConfigPushLog, User, DeviceTypeConfig, AutoDiscoveryRule, AutoDiscoveryRunLog, AutoDiscoveryJob, AlertLog, _isoformat_utc, normalize_user_role
 from device_drivers import register_driver, load_custom_drivers
 from device_drivers.builtin import register_builtin_drivers
-from compliance import check_config
-from backup_service import run_backup_async, run_single_backup, test_connection, run_backup_task
+from backup_service import run_single_backup, test_connection, run_backup_task
+from blueprints.auth import create_auth_blueprint
+from blueprints.backup_logs import create_backup_logs_blueprint
+from blueprints.config_files import ConfigFilesService, create_config_files_blueprint
+from blueprints.device_groups import create_device_groups_blueprint
+from blueprints.device_inventory import create_device_inventory_blueprint
+from blueprints.device_types import create_device_types_blueprint
+from blueprints.pages import create_pages_blueprint
+from blueprints.reports import create_reports_blueprint
+from blueprints.settings_core import create_settings_core_blueprint
+from blueprints.settings_ops import create_settings_ops_blueprint
+from blueprints.settings_assets import create_settings_assets_blueprint
+from blueprints.users import create_users_blueprint
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static'))
 app.config.from_object('config')
@@ -50,14 +59,10 @@ LOGO_DIR = os.path.join(DATA_ROOT, 'logo')
 
 
 def _table_has_column(conn, table_name, column_name):
-    """判断表是否包含某列，兼容 SQLite 与 MySQL/MariaDB。"""
+    """判断表是否包含某列，兼容 MySQL/MariaDB。"""
     from sqlalchemy import text
     dialect = db.engine.dialect.name
-    if dialect == 'sqlite':
-        r = conn.execute(text("PRAGMA table_info(%s)" % table_name))
-        cols = [row[1] for row in r]
-        return column_name in cols
-    if dialect == 'mysql':
+    if dialect in ('mysql', 'mariadb'):
         r = conn.execute(
             text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"),
             {"t": table_name}
@@ -260,7 +265,7 @@ def _ensure_device_type_configs():
 
 
 def _ensure_user_password_column():
-    """为 users 表添加 password_hash 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 users 表添加 password_hash 列（兼容旧 MariaDB 库）"""
     global _user_password_column_ensured
     if _user_password_column_ensured:
         return
@@ -277,7 +282,7 @@ def _ensure_user_password_column():
 
 
 def _ensure_user_email_phone_columns():
-    """为 users 表添加 email、phone 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 users 表添加 email、phone 列（兼容旧 MariaDB 库）"""
     global _user_email_phone_columns_ensured
     if _user_email_phone_columns_ensured:
         return
@@ -341,6 +346,24 @@ def _ensure_super_admin():
             pass
 
 
+def _normalize_existing_user_roles():
+    """将旧角色名 operator/readonly 迁移到 ops/viewer。"""
+    try:
+        changed = False
+        for u in User.query.all():
+            normalized = normalize_user_role(u.role)
+            if u.role != normalized:
+                u.role = normalized
+                changed = True
+        if changed:
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _ensure_tables():
     """确保所有表存在（包括后续新增的表，如自动发现运行日志）。"""
     global _tables_ensured
@@ -351,6 +374,7 @@ def _ensure_tables():
             _ensure_user_password_column()
             _ensure_user_email_phone_columns()
             _ensure_super_admin()
+            _normalize_existing_user_roles()
             _ensure_backup_job_run_type_column()
             _ensure_backup_job_executor_column()
             # 初始化设备类型配置
@@ -360,7 +384,7 @@ def _ensure_tables():
 
 
 def _ensure_connection_type_column():
-    """为已有数据库添加 connection_type 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为已有数据库添加 connection_type 列（兼容旧 MariaDB 库）"""
     global _connection_type_column_ensured
     if _connection_type_column_ensured:
         return
@@ -377,7 +401,7 @@ def _ensure_connection_type_column():
 
 
 def _ensure_device_group_column():
-    """为 devices 表添加 device_group 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 devices 表添加 device_group 列（兼容旧 MariaDB 库）"""
     global _device_group_column_ensured
     if _device_group_column_ensured:
         return
@@ -394,7 +418,7 @@ def _ensure_device_group_column():
 
 
 def _ensure_device_maintenance_columns():
-    """为 devices 表添加 maintenance_start、maintenance_end 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 devices 表添加 maintenance_start、maintenance_end 列（兼容旧 MariaDB 库）"""
     global _device_maintenance_columns_ensured
     if _device_maintenance_columns_ensured:
         return
@@ -414,7 +438,7 @@ def _ensure_device_maintenance_columns():
 
 
 def _ensure_device_ssh_port_column():
-    """为 devices 表添加 ssh_port 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 devices 表添加 ssh_port 列（兼容旧 MariaDB 库）"""
     global _device_ssh_port_column_ensured
     if _device_ssh_port_column_ensured:
         return
@@ -431,7 +455,7 @@ def _ensure_device_ssh_port_column():
 
 
 def _ensure_device_telnet_port_column():
-    """为 devices 表添加 telnet_port 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 devices 表添加 telnet_port 列（兼容旧 MariaDB 库）"""
     global _device_telnet_port_column_ensured
     if _device_telnet_port_column_ensured:
         return
@@ -448,7 +472,7 @@ def _ensure_device_telnet_port_column():
 
 
 def _ensure_user_allowed_groups_column():
-    """为 users 表添加 allowed_groups 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 users 表添加 allowed_groups 列（兼容旧 MariaDB 库）"""
     global _user_allowed_groups_column_ensured
     if _user_allowed_groups_column_ensured:
         return
@@ -465,7 +489,7 @@ def _ensure_user_allowed_groups_column():
 
 
 def _ensure_backup_job_run_type_column():
-    """为 backup_job_runs 表添加 run_type 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 backup_job_runs 表添加 run_type 列（兼容旧 MariaDB 库）"""
     global _backup_job_run_type_column_ensured
     if _backup_job_run_type_column_ensured:
         return
@@ -482,7 +506,7 @@ def _ensure_backup_job_run_type_column():
 
 
 def _ensure_backup_job_executor_column():
-    """为 backup_job_runs 表添加 executor 列（兼容旧库，支持 SQLite 与 MariaDB）"""
+    """为 backup_job_runs 表添加 executor 列（兼容旧 MariaDB 库）"""
     global _backup_job_executor_column_ensured
     if _backup_job_executor_column_ensured:
         return
@@ -664,7 +688,7 @@ def require_login():
     if 'user' not in session:
         if path.startswith('/api/'):
             return jsonify({'error': 'unauthorized'}), 401
-        return redirect(url_for('login_view', next=path))
+        return redirect(url_for('auth.login_view', next=path))
 
     # 会话超时：无操作 N 分钟后退出
     try:
@@ -682,7 +706,7 @@ def require_login():
                     session.clear()
                     if path.startswith('/api/'):
                         return jsonify({'error': 'session_expired'}), 401
-                    return redirect(url_for('login_view', next=path))
+                    return redirect(url_for('auth.login_view', next=path))
     except Exception:
         pass
 
@@ -981,9 +1005,12 @@ def _ensure_user_record(username: str, auth_source: str = 'local'):
             )
             db.session.add(u)
         else:
-            # 若之前未设置角色，则根据当前登录方式补全一个合理默认值
+            # 若之前未设置角色，则根据当前登录方式补全一个合理默认值；旧角色名在这里同步归一。
+            normalized_role = normalize_user_role(u.role)
             if not (u.role or '').strip():
                 u.role = 'admin' if is_admin_default else 'viewer'
+            elif u.role != normalized_role:
+                u.role = normalized_role
             # 更新来源与显示名（仅在为空时）
             if not (u.source or '').strip():
                 u.source = str(auth_source or 'local')[:32]
@@ -991,7 +1018,7 @@ def _ensure_user_record(username: str, auth_source: str = 'local'):
                 u.display_name = str(username)[:128]
             # 被禁用用户仍允许展示，但不在此处强行改为启用
         db.session.commit()
-        session['role'] = u.role or 'viewer'
+        session['role'] = normalize_user_role(u.role)
     except Exception:
         try:
             db.session.rollback()
@@ -1041,8 +1068,10 @@ def _current_user_allowed_groups():
 
 def _current_role() -> str:
     """当前登录用户的角色：admin / ops / viewer"""
-    role = session.get('role')
-    if role:
+    raw_role = session.get('role')
+    if raw_role:
+        role = normalize_user_role(raw_role)
+        session['role'] = role
         return role
     username = _current_username()
     if not username:
@@ -1051,7 +1080,7 @@ def _current_role() -> str:
         u = User.query.filter_by(username=username).first()
         if not u:
             return 'viewer'
-        session['role'] = u.role or 'viewer'
+        session['role'] = normalize_user_role(u.role)
         return session['role']
     except Exception:
         return 'viewer'
@@ -1193,15 +1222,6 @@ def _push_config_via_ssh(ip: str, username: str, password: str, commands: str, s
                 pass
 
 
-@app.route('/login', methods=['GET'])
-def login_view():
-    """登录页"""
-    # 已登录直接跳首页
-    if session.get('user'):
-        return redirect(url_for('index'))
-    return render_template('login.html')
-
-
 def _login_lockout_key():
     """登录锁定 key：用户名 + IP，避免单 IP 锁死所有用户"""
     username = (request.get_json(force=True, silent=True) or {}).get('username') or ''
@@ -1281,206 +1301,6 @@ def _check_password_policy(raw_password: str) -> tuple:
     return True, ''
 
 
-@app.route('/api/login', methods=['POST'])
-def api_login():
-    """用户名/密码登录（本地账号 + 可选 LDAP）"""
-    _ensure_tables()
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = data.get('password') or ''
-    if not username or not password:
-        return jsonify({'error': '用户名和密码不能为空'}), 400
-
-    locked, remain = _check_login_locked()
-    if locked:
-        return jsonify({'error': f'登录失败次数过多，请 {remain} 分钟后再试。'}), 403
-
-    # 若该用户已在用户表中被禁用，则拒绝登录
-    try:
-        _ensure_user_password_column()
-        _ensure_super_admin()
-        u = User.query.filter_by(username=username).first()
-        if u is not None and u.is_active is False:
-            return jsonify({'error': '该用户已被禁用，请联系系统管理员。'}), 403
-    except Exception:
-        # 查询异常时不影响后续登录流程
-        pass
-
-    authed = False
-    auth_source = None
-
-    # 1. 本地账号优先：使用 users 表中的本地账号（支持多本地账号 + 独立密码）
-    try:
-        u = User.query.filter_by(username=username, source='local').first()
-    except Exception:
-        u = None
-    if u is not None and u.check_password(password):
-        authed = True
-        auth_source = 'local'
-
-    # 2. 兼容旧逻辑：使用设置中的默认用户名/密码（首次成功后会把密码写入 users 表）
-    if not authed:
-        local_user = _get_setting('username', DEFAULT_USERNAME)
-        local_pass = _get_setting('password', DEFAULT_PASSWORD)
-        if username == local_user and password == local_pass:
-            authed = True
-            auth_source = 'local'
-            # 确保在 users 表中创建/更新对应记录，并补充密码哈希
-            try:
-                _ensure_user_password_column()
-                u2 = User.query.filter_by(username=username).first()
-                if u2 is None:
-                    u2 = User(
-                        username=username[:128],
-                        display_name=username[:128],
-                        source='local',
-                        role='admin',
-                        is_active=True,
-                    )
-                    db.session.add(u2)
-                u2.set_password(password)
-                db.session.commit()
-            except Exception:
-                try:
-                    db.session.rollback()
-                except Exception:
-                    pass
-
-    # 3. LDAP 校验（开启且本地失败时）
-    if not authed and _get_setting('ldap_enabled', '0') == '1':
-        try:
-            from ldap3 import Server, Connection, ALL
-        except ImportError:
-            return jsonify({'error': '服务器未安装 ldap3，无法使用 LDAP 登录'}), 500
-        ldap_server = _get_setting('ldap_server', '').strip()
-        ldap_base_dn = _get_setting('ldap_base_dn', '').strip()
-        ldap_bind_dn = _get_setting('ldap_bind_dn', '').strip()
-        ldap_bind_password = _get_setting('ldap_bind_password', '')
-        ldap_user_filter = (_get_setting('ldap_user_filter', '(uid={username})') or '(uid={username})').strip()
-        if not ldap_server or not ldap_base_dn:
-            return jsonify({'error': 'LDAP 配置不完整（服务器或 Base DN 未设置）'}), 500
-        try:
-            server = Server(ldap_server, get_info=ALL)
-            # 管理员 Bind（如需匿名可根据实际情况调整）
-            if ldap_bind_dn:
-                conn = Connection(server, user=ldap_bind_dn, password=ldap_bind_password, auto_bind=True)
-            else:
-                conn = Connection(server, auto_bind=True)
-            search_filter = ldap_user_filter.replace('{username}', username)
-            # 不请求虚构的 dn 属性，只用 DN 本身（entry_dn）
-            if not conn.search(ldap_base_dn, search_filter):
-                return jsonify({'error': 'LDAP 登录失败：未找到该用户'}), 401
-            user_dn = conn.entries[0].entry_dn
-            # 用用户 DN + 密码重新 Bind 校验密码
-            user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
-            user_conn.unbind()
-            conn.unbind()
-            authed = True
-            auth_source = 'ldap'
-        except Exception as e:
-            return jsonify({'error': f'LDAP 登录失败：{e}'}), 401
-
-    if not authed:
-        _login_fail_record()
-        return jsonify({'error': '用户名或密码错误'}), 401
-
-    _login_fail_clear()
-    # 登录成功，写入 Session
-    session['user'] = username
-    session['auth_source'] = auth_source or 'local'
-
-    # 记录登录日志（用于仪表盘展示最近登录）
-    try:
-        raw = request.headers.get('X-Forwarded-For') or request.headers.get('X-Real-IP') or (getattr(request, 'remote_addr', None) or '')
-        src_ip = (raw.split(',')[0].strip() if isinstance(raw, str) and ',' in raw else raw) or ''
-        if not isinstance(src_ip, str):
-            src_ip = str(src_ip)
-        log = LoginLog(
-            username=username,
-            source_ip=src_ip,
-            auth_source=auth_source or 'local',
-        )
-        db.session.add(log)
-        db.session.commit()
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-
-    # 确保在用户表中有一条记录，并自动赋予默认角色
-    try:
-        _ensure_user_record(username, auth_source or 'local')
-    except Exception:
-        # 出现异常时不影响登录流程
-        pass
-
-    # 写入审计日志
-    _write_audit('login_success', resource_type='auth', resource_id=username)
-
-    return jsonify({'ok': True})
-
-
-@app.route('/api/ldap/test', methods=['POST'])
-def api_ldap_test():
-    """测试 LDAP 登录：使用当前配置，尝试绑定并返回详细错误信息（不创建会话）"""
-    _ensure_tables()
-    if _get_setting('ldap_enabled', '0') != '1':
-        return jsonify({'ok': False, 'message': 'LDAP 未启用，请先在设置中勾选「启用 LDAP 登录」。'}), 400
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = data.get('password') or ''
-    if not username or not password:
-        return jsonify({'ok': False, 'message': '请输入测试用户名和密码。'}), 400
-    try:
-        from ldap3 import Server, Connection, ALL
-    except ImportError:
-        return jsonify({'ok': False, 'message': '服务器未安装 ldap3，无法使用 LDAP 登录。'}), 500
-
-    ldap_server = _get_setting('ldap_server', '').strip()
-    ldap_base_dn = _get_setting('ldap_base_dn', '').strip()
-    ldap_bind_dn = _get_setting('ldap_bind_dn', '').strip()
-    ldap_bind_password = _get_setting('ldap_bind_password', '')
-    ldap_user_filter = (_get_setting('ldap_user_filter', '(uid={username})') or '(uid={username})').strip()
-    if not ldap_server or not ldap_base_dn:
-        return jsonify({'ok': False, 'message': 'LDAP 配置不完整（服务器地址或 Base DN 未设置）。'}), 500
-
-    search_filter = ldap_user_filter.replace('{username}', username)
-    try:
-        server = Server(ldap_server, get_info=ALL)
-        # 管理员 Bind（如需匿名可根据实际情况调整）
-        if ldap_bind_dn:
-            conn = Connection(server, user=ldap_bind_dn, password=ldap_bind_password, auto_bind=True)
-        else:
-            conn = Connection(server, auto_bind=True)
-        # 搜索用户（不请求虚构的 dn 属性，只使用 entry_dn）
-        found = conn.search(ldap_base_dn, search_filter)
-        if not found or not conn.entries:
-            conn.unbind()
-            return jsonify({'ok': False, 'message': f'未找到该用户（filter={search_filter}, base_dn={ldap_base_dn}）'}), 200
-        user_dn = conn.entries[0].entry_dn
-        # 用用户 DN + 密码重新 Bind 校验密码
-        try:
-            user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
-            user_conn.unbind()
-            conn.unbind()
-            return jsonify({'ok': True, 'message': f'LDAP 登录测试成功，用户 DN: {user_dn}（filter={search_filter}）'}), 200
-        except Exception as e2:
-            conn.unbind()
-            return jsonify({'ok': False, 'message': f'用户密码校验失败：{e2}（user_dn={user_dn}, filter={search_filter}）'}), 200
-    except Exception as e:
-        return jsonify({'ok': False, 'message': f'LDAP 连接或搜索失败：{e}（filter={search_filter}, base_dn={ldap_base_dn}）'}), 200
-
-
-@app.route('/logout')
-def logout_view():
-    """登出并返回登录页"""
-    user = session.get('user') or ''
-    _write_audit('logout', resource_type='auth', resource_id=user)
-    session.clear()
-    return redirect(url_for('login_view'))
-
-
 # 备份失败原因规范化（行业通用英文），用于告警正文
 def _normalize_backup_failure_reason(status, message):
     """将 status + message 映射为统一英文失败原因。"""
@@ -1527,31 +1347,6 @@ def _log_callback(ip, hostname, dev_type, status, message, duration, config_path
                 _current_job['fail'] = _current_job.get('fail', 0) + 1
     with _backup_lock:
         pass  # 可在此广播进度
-
-
-@app.route('/')
-def index():
-    try:
-        _ensure_tables()
-        _ensure_connection_type_column()
-        _ensure_device_group_column()
-        _ensure_device_maintenance_columns()
-        _ensure_device_ssh_port_column()
-        _ensure_device_telnet_port_column()
-        _ensure_user_allowed_groups_column()
-    except Exception:
-        pass
-    return render_template('index.html')
-
-
-@app.route('/configs/device/<prefix>/<path:hostname>')
-def config_device_page(prefix, hostname):
-    """重定向到主应用单设备配置面板 #config-device/prefix/hostname"""
-    if '..' in prefix or '..' in hostname or '/' in prefix:
-        return 'Invalid path', 400
-    from urllib.parse import quote
-    frag = 'config-device/' + quote(prefix, safe='') + '/' + quote(hostname, safe='')
-    return redirect(url_for('index') + '#' + frag)
 
 
 # ---------- 仪表盘 / 可观测 ----------
@@ -1851,510 +1646,6 @@ def _dashboard_data():
     })
 
 
-@app.route('/api/dashboard/export-no-backup-24h')
-def export_no_backup_24h_csv():
-    """导出 24 小时内未成功备份的已启用设备列表（CSV）"""
-    try:
-        _ensure_tables()
-        _ensure_device_group_column()
-    except Exception:
-        pass
-    last_24h = datetime.utcnow() - timedelta(hours=24)
-    recent_ok_hosts = {
-        r[0] for r in
-        BackupLog.query.filter(
-            BackupLog.created_at >= last_24h,
-            BackupLog.status == 'OK',
-        ).with_entities(BackupLog.hostname).distinct().all()
-    }
-    enabled_devs = Device.query.filter_by(enabled=True).order_by(Device.hostname).all()
-    allowed_grps = _current_user_allowed_groups()
-    if allowed_grps is not None:
-        enabled_devs = [d for d in enabled_devs if (d.device_group or '').strip() in allowed_grps or (not (d.device_group or '').strip() and '（未分组）' in allowed_grps)]
-    no_backup = [d for d in enabled_devs if (d.hostname or '') not in recent_ok_hosts]
-    buf = io.StringIO()
-    buf.write('\ufeff')
-    w = csv.writer(buf)
-    w.writerow(['主机名', '管理IP', '设备类型', '分组'])
-    for d in no_backup:
-        w.writerow([d.hostname, d.ip, d.device_type or '', (d.device_group or '').strip() or ''])
-    buf.seek(0)
-    return Response(
-        buf.getvalue(),
-        mimetype='text/csv; charset=utf-8-sig',
-        headers={'Content-Disposition': 'attachment; filename=no_backup_24h.csv'},
-    )
-
-
-@app.route('/api/devices/export')
-def export_devices_csv():
-    """导出设备列表 CSV（运维报表）"""
-    enabled = request.args.get('enabled')
-    q = Device.query.order_by(Device.hostname)
-    if enabled is not None:
-        q = q.filter(Device.enabled == (enabled.lower() == 'true'))
-    devices = q.all()
-    buf = io.StringIO()
-    # 写入 UTF-8 BOM，确保在 Excel 中按 UTF-8 正常显示中文
-    buf.write('\ufeff')
-    w = csv.writer(buf)
-    w.writerow(['主机名', '管理IP', '设备类型', '分组', '连接方式', '启用', '备注'])
-    for d in devices:
-        conn = (d.connection_type or '').upper() or '默认'
-        grp = (d.device_group or '').strip() or ''
-        w.writerow([d.hostname, d.ip, d.device_type, grp, conn, '是' if d.enabled else '否', ''])
-    buf.seek(0)
-    # 写入导出审计
-    try:
-        _write_audit('export_devices_csv', resource_type='device', resource_id='', detail=f'count={len(devices)}')
-    except Exception:
-        pass
-
-    return Response(
-        buf.getvalue(),
-        mimetype='text/csv; charset=utf-8-sig',
-        headers={'Content-Disposition': 'attachment; filename=devices.csv'},
-    )
-
-
-# ---------- 设备管理 ----------
-@app.route('/api/devices', methods=['GET'])
-def list_devices():
-    """设备列表（支持分页、站点、类型、搜索、排序）"""
-    enabled = request.args.get('enabled')
-    page = request.args.get('page', 1, type=int)
-    default_pp = int(_get_setting('device_per_page_default', '50') or '50')
-    per_page = request.args.get('per_page', default_pp, type=int)
-    per_page = max(1, min(per_page, 200))
-    site = request.args.get('site', '').strip()   # 站点前缀，如 sha1、szx1
-    dev_type = request.args.get('device_type', '').strip()
-    group = request.args.get('group', '').strip()
-    search = request.args.get('search', '').strip()
-    sort_by = (request.args.get('sort_by') or 'hostname').strip()
-    sort_dir = (request.args.get('sort_dir') or 'asc').strip().lower()
-
-    q = Device.query
-    allowed_grps = _current_user_allowed_groups()
-    if allowed_grps is not None:
-        from sqlalchemy import or_
-        grp_cond = Device.device_group.in_(allowed_grps)
-        if '（未分组）' in allowed_grps:
-            grp_cond = or_(grp_cond, Device.device_group.is_(None), Device.device_group == '')
-        q = q.filter(grp_cond)
-    if enabled is not None:
-        q = q.filter(Device.enabled == (enabled.lower() == 'true'))
-    if site:
-        q = q.filter(Device.hostname.like(f'{site}.%'))
-    if group:
-        q = q.filter(Device.device_group == group)
-    if dev_type:
-        # 使用规范化后的类型进行精确匹配，避免大小写带来的筛选不一致
-        q = q.filter(Device.device_type == _normalize_device_type(dev_type))
-    if search:
-        q = q.filter(
-            (Device.hostname.ilike(f'%{search}%')) | (Device.ip.ilike(f'%{search}%'))
-        )
-    # 排序：支持按主机名 / 管理 IP / 设备类型 / 分组 排序
-    order_col = Device.hostname
-    if sort_by == 'ip':
-        order_col = Device.ip
-    elif sort_by == 'device_type':
-        order_col = Device.device_type
-    elif sort_by == 'group':
-        order_col = Device.device_group
-    if sort_dir == 'desc':
-        order_col = order_col.desc()
-    else:
-        sort_dir = 'asc'
-    q = q.order_by(order_col, Device.id.asc())
-
-    pagination = q.paginate(page=page, per_page=per_page)
-    default_conn = _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'TELNET'
-    from_devices = {r[0] for r in Device.query.with_entities(Device.device_group).distinct().all() if r[0]}
-    predefined = [g.strip() for g in (_get_setting('device_groups', '') or '').split(',') if g.strip()]
-    groups = sorted(set(predefined) | from_devices)
-    return jsonify({
-        'items': [d.to_dict() for d in pagination.items],
-        'total': pagination.total,
-        'page': page,
-        'per_page': per_page,
-        'groups': groups,
-        'default_connection_type': default_conn,
-        'sort_by': sort_by,
-        'sort_dir': sort_dir,
-        'can_manage_devices': _can_edit_settings(),
-    })
-
-
-@app.route('/api/devices', methods=['POST'])
-def add_device():
-    """新增设备"""
-    data = request.get_json()
-    if not data or not data.get('ip') or not data.get('hostname') or not data.get('device_type'):
-        return jsonify({'error': '缺少 ip/hostname/device_type'}), 400
-    conn_type = (data.get('connection_type') or '').strip().upper()
-    if conn_type and conn_type not in ('TELNET', 'SSH'):
-        conn_type = None
-    grp = (str(data.get('group') or '').strip())[:64] or None
-    m_start = (str(data.get('maintenance_start') or '').strip())[:8] or None
-    m_end = (str(data.get('maintenance_end') or '').strip())[:8] or None
-    try:
-        sp = data.get('ssh_port')
-        ssh_port_val = int(sp) if sp is not None and str(sp).strip() != '' else None
-        if ssh_port_val is not None:
-            ssh_port_val = max(1, min(65535, ssh_port_val))
-    except (TypeError, ValueError):
-        ssh_port_val = None
-    try:
-        tp = data.get('telnet_port')
-        telnet_port_val = int(tp) if tp is not None and str(tp).strip() != '' else None
-        if telnet_port_val is not None:
-            telnet_port_val = max(1, min(65535, telnet_port_val))
-    except (TypeError, ValueError):
-        telnet_port_val = None
-    dev = Device(
-        ip=data['ip'].strip(),
-        hostname=data['hostname'].strip(),
-        device_type=_normalize_device_type(data['device_type']),
-        enabled=data.get('enabled', True),
-        device_group=grp,
-        maintenance_start=m_start,
-        maintenance_end=m_end,
-        username=data.get('username'),
-        password=data.get('password'),
-        connection_type=conn_type or None,
-        ssh_port=ssh_port_val,
-        telnet_port=telnet_port_val,
-    )
-    db.session.add(dev)
-    db.session.commit()
-    _write_audit('add_device', resource_type='device', resource_id=str(dev.id), detail=f'hostname={dev.hostname}, ip={dev.ip}')
-    return jsonify(dev.to_dict())
-
-
-@app.route('/api/devices/<int:pk>', methods=['GET', 'PUT', 'DELETE'])
-def device_detail(pk):
-    dev = Device.query.get_or_404(pk)
-    if request.method == 'GET':
-        return jsonify(dev.to_dict())
-    if request.method == 'DELETE':
-        if not _can_edit_settings():
-            return jsonify({'error': '当前账号无权删除设备，请使用管理员账号登录。'}), 403
-        _write_audit('delete_device', resource_type='device', resource_id=str(dev.id), detail=f'hostname={dev.hostname}, ip={dev.ip}')
-        db.session.delete(dev)
-        db.session.commit()
-        return jsonify({'ok': True})
-    # PUT
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改设备，请使用管理员账号登录。'}), 403
-    data = request.get_json(force=True, silent=True)
-    if not data or not isinstance(data, dict):
-        return jsonify({'error': '请求体无效或非 JSON'}), 400
-    ip_raw = (data.get('ip') or '').strip()
-    hostname_raw = (data.get('hostname') or '').strip()
-    if not ip_raw or not hostname_raw:
-        return jsonify({'error': '缺少 IP 或主机名'}), 400
-    dev.ip = ip_raw
-    dev.hostname = hostname_raw
-    if data.get('device_type'):
-        dev.device_type = _normalize_device_type(data['device_type'])
-    if 'enabled' in data:
-        dev.enabled = data['enabled']
-    if 'username' in data:
-        dev.username = data['username'] or None
-    if 'password' in data:
-        dev.password = data['password'] if data['password'] else None
-    if 'connection_type' in data:
-        ct_raw = data.get('connection_type')
-        if ct_raw is None or (isinstance(ct_raw, str) and not ct_raw.strip()):
-            dev.connection_type = None
-        else:
-            ct = str(ct_raw).strip().upper()
-            dev.connection_type = ct if ct in ('TELNET', 'SSH') else None
-    if 'group' in data:
-        dev.device_group = (str(data.get('group') or '').strip())[:64] or None
-    if 'maintenance_start' in data:
-        dev.maintenance_start = (str(data.get('maintenance_start') or '').strip())[:8] or None
-    if 'maintenance_end' in data:
-        dev.maintenance_end = (str(data.get('maintenance_end') or '').strip())[:8] or None
-    if 'ssh_port' in data:
-        try:
-            sp = data.get('ssh_port')
-            dev.ssh_port = int(sp) if sp is not None and str(sp).strip() != '' else None
-            if dev.ssh_port is not None:
-                dev.ssh_port = max(1, min(65535, dev.ssh_port))
-        except (TypeError, ValueError):
-            dev.ssh_port = None
-    if 'telnet_port' in data:
-        try:
-            tp = data.get('telnet_port')
-            dev.telnet_port = int(tp) if tp is not None and str(tp).strip() != '' else None
-            if dev.telnet_port is not None:
-                dev.telnet_port = max(1, min(65535, dev.telnet_port))
-        except (TypeError, ValueError):
-            dev.telnet_port = None
-    # 兼容部分环境下 ORM 未正确刷新 connection_type 的情况，直接执行一次 UPDATE
-    try:
-        from sqlalchemy import text as _sql_text
-        db.session.execute(
-            _sql_text("UPDATE devices SET connection_type = :ct WHERE id = :id"),
-            {"ct": dev.connection_type, "id": dev.id},
-        )
-    except Exception:
-        pass
-    db.session.commit()
-    _write_audit('update_device', resource_type='device', resource_id=str(dev.id), detail=f'hostname={dev.hostname}, ip={dev.ip}')
-    return jsonify(dev.to_dict())
-
-
-@app.route('/api/devices/batch-delete', methods=['POST'])
-def batch_delete_devices():
-    """批量删除设备"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权批量删除设备，请使用全局用户名登录。'}), 403
-    data = request.get_json()
-    ids = data.get('ids') if isinstance(data, dict) else []
-    if not ids or not isinstance(ids, list):
-        return jsonify({'error': '请提供 ids 数组'}), 400
-    count = Device.query.filter(Device.id.in_(ids)).delete(synchronize_session=False)
-    db.session.commit()
-    _write_audit('batch_delete_devices', resource_type='device', resource_id='', detail=f'ids={len(ids)}, deleted={count}')
-    return jsonify({'ok': True, 'deleted': count})
-
-
-@app.route('/api/devices/delete-all', methods=['POST'])
-def delete_all_devices():
-    """清空全部设备（用于真正清空列表后再做自动发现等）"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权操作，请使用管理员账号登录。'}), 403
-    # 与列表接口一致：若存在分组权限则只删除可见范围内的设备
-    q = Device.query
-    allowed_grps = _current_user_allowed_groups()
-    if allowed_grps is not None:
-        from sqlalchemy import or_
-        grp_cond = Device.device_group.in_(allowed_grps)
-        if '（未分组）' in allowed_grps:
-            grp_cond = or_(grp_cond, Device.device_group.is_(None), Device.device_group == '')
-        q = q.filter(grp_cond)
-    count = q.delete(synchronize_session=False)
-    db.session.commit()
-    _write_audit('delete_all_devices', resource_type='device', resource_id='', detail=f'deleted={count}')
-    return jsonify({'ok': True, 'deleted': count})
-
-
-@app.route('/api/devices/batch-update', methods=['POST'])
-def batch_update_devices():
-    """批量更新设备：类型、分组、连接方式、端口等。当 ids 仅一个时支持完整字段（ip、hostname、enabled 等）。"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权批量修改设备，请使用管理员账号登录。'}), 403
-    data = request.get_json(force=True, silent=True) or {}
-    ids = data.get('ids') if isinstance(data.get('ids'), list) else []
-    if not ids:
-        return jsonify({'error': '请提供设备 id 列表 ids'}), 400
-    devices = Device.query.filter(Device.id.in_(ids)).all()
-    if not devices:
-        return jsonify({'ok': True, 'updated': 0})
-    single_full = (len(ids) == 1 and isinstance(data.get('ip'), str) and isinstance(data.get('hostname'), str))
-    updated = 0
-    for dev in devices:
-        changed = False
-        if single_full:
-            ip_raw = (data.get('ip') or '').strip()
-            hostname_raw = (data.get('hostname') or '').strip()
-            if ip_raw and hostname_raw:
-                if dev.ip != ip_raw:
-                    dev.ip = ip_raw
-                    changed = True
-                if dev.hostname != hostname_raw:
-                    dev.hostname = hostname_raw
-                    changed = True
-            if 'device_type' in data and data['device_type']:
-                v = _normalize_device_type(str(data['device_type']))
-                if dev.device_type != v:
-                    dev.device_type = v
-                    changed = True
-            if 'enabled' in data:
-                v = bool(data['enabled'])
-                if dev.enabled != v:
-                    dev.enabled = v
-                    changed = True
-            if 'username' in data:
-                v = (data.get('username') or '').strip() or None
-                if dev.username != v:
-                    dev.username = v
-                    changed = True
-            if 'password' in data:
-                v = data.get('password')
-                dev.password = (v.strip() if v and str(v).strip() else None) if v else None
-                changed = True  # 视为已修改（留空即清空密码）
-            if 'maintenance_start' in data:
-                v = (str(data.get('maintenance_start') or '').strip())[:8] or None
-                if dev.maintenance_start != v:
-                    dev.maintenance_start = v
-                    changed = True
-            if 'maintenance_end' in data:
-                v = (str(data.get('maintenance_end') or '').strip())[:8] or None
-                if dev.maintenance_end != v:
-                    dev.maintenance_end = v
-                    changed = True
-        if 'device_type' in data and data['device_type'] is not None and not single_full:
-            v = _normalize_device_type(str(data['device_type']))
-            if dev.device_type != v:
-                dev.device_type = v
-                changed = True
-        if 'group' in data:
-            v = (str(data.get('group') or '').strip())[:64] or None
-            if dev.device_group != v:
-                dev.device_group = v
-                changed = True
-        if 'connection_type' in data:
-            ct = (str(data.get('connection_type') or '').strip()).upper()
-            v = ct if ct in ('TELNET', 'SSH') else None
-            if dev.connection_type != v:
-                dev.connection_type = v
-                changed = True
-        if 'ssh_port' in data:
-            try:
-                sp = data['ssh_port']
-                if sp is None or (isinstance(sp, str) and str(sp).strip() == ''):
-                    v = None
-                else:
-                    v = max(1, min(65535, int(sp)))
-                if dev.ssh_port != v:
-                    dev.ssh_port = v
-                    changed = True
-            except (TypeError, ValueError):
-                pass
-        if 'telnet_port' in data:
-            try:
-                tp = data['telnet_port']
-                if tp is None or (isinstance(tp, str) and str(tp).strip() == ''):
-                    v = None
-                else:
-                    v = max(1, min(65535, int(tp)))
-                if dev.telnet_port != v:
-                    dev.telnet_port = v
-                    changed = True
-            except (TypeError, ValueError):
-                pass
-        if 'maintenance_start' in data:
-            v = (str(data.get('maintenance_start') or '').strip())[:8] or None
-            if dev.maintenance_start != v:
-                dev.maintenance_start = v
-                changed = True
-        if 'maintenance_end' in data:
-            v = (str(data.get('maintenance_end') or '').strip())[:8] or None
-            if dev.maintenance_end != v:
-                dev.maintenance_end = v
-                changed = True
-        if changed:
-            updated += 1
-    db.session.commit()
-    _write_audit('batch_update_devices', resource_type='device', resource_id='', detail=f'ids={len(ids)}, updated={updated}')
-    return jsonify({'ok': True, 'updated': updated})
-
-
-@app.route('/api/devices/sites')
-def list_sites():
-    """设备站点列表（从 hostname 前缀提取，用于筛选）"""
-    from sqlalchemy import func
-    # hostname 形如 sha1.pe1 -> 取 sha1
-    rows = Device.query.with_entities(Device.hostname).distinct().all()
-    prefixes = set()
-    for (h,) in rows:
-        if h and '.' in h:
-            prefixes.add(h.split('.', 1)[0])
-        elif h:
-            prefixes.add(h)
-    return jsonify({'sites': sorted(prefixes)})
-
-
-@app.route('/api/devices/import', methods=['POST'])
-def import_devices():
-    """从 ip_list 格式文本导入，每行: 主机名 管理IP 类型"""
-    text = request.get_data(as_text=True) or request.form.get('text', '')
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    count = 0
-    for line in lines:
-        parts = line.split()
-        if len(parts) >= 3:
-            hostname, ip, dev_type = parts[0], parts[1], _normalize_device_type(parts[2])
-            grp = (parts[3].strip())[:64] if len(parts) > 3 and parts[3].strip() else None
-            if Device.query.filter_by(ip=ip, hostname=hostname).first():
-                continue
-            db.session.add(Device(ip=ip, hostname=hostname, device_type=dev_type, device_group=grp))
-            count += 1
-    db.session.commit()
-    if count > 0:
-        _write_audit('import_devices', resource_type='device', resource_id='', detail=f'imported={count}')
-    return jsonify({'imported': count})
-
-
-@app.route('/api/device-groups', methods=['GET'])
-def list_device_groups():
-    """预定义设备分组列表；?from_devices=1 时合并设备表中实际存在的分组名（含「未分组」）"""
-    raw = (_get_setting('device_groups', '') or '').strip()
-    groups = [g.strip() for g in raw.split(',') if g.strip()]
-    if request.args.get('from_devices'):
-        try:
-            _ensure_device_group_column()
-        except Exception:
-            pass
-        from_devices = {r[0] for r in Device.query.with_entities(Device.device_group).distinct().all() if r[0]}
-        for g in from_devices:
-            if g and g.strip() and g.strip() not in groups:
-                groups.append(g.strip())
-        if '（未分组）' not in groups:
-            groups.append('（未分组）')
-        groups = sorted(groups)
-    return jsonify({'groups': groups})
-
-
-@app.route('/api/device-groups', methods=['POST'])
-def create_device_group():
-    """创建设备分组：添加一个预定义分组名"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权操作，请使用管理员账号登录。'}), 403
-    data = request.get_json(force=True, silent=True) or {}
-    name = (str(data.get('name') or '').strip())[:64]
-    if not name:
-        return jsonify({'error': '分组名称不能为空。'}), 400
-    raw = (_get_setting('device_groups', '') or '').strip()
-    current = [g.strip() for g in raw.split(',') if g.strip()]
-    if name in current:
-        return jsonify({'error': '该分组已存在。', 'groups': current}), 400
-    current.append(name)
-    _set_setting('device_groups', ','.join(sorted(current)))
-    return jsonify({'ok': True, 'groups': sorted(current)})
-
-
-@app.route('/api/device-groups/<path:name>', methods=['DELETE'])
-def delete_device_group(name):
-    """删除预定义分组名（仅从列表中移除，不修改已属该分组的设备）"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权操作，请使用管理员账号登录。'}), 403
-    name = name.strip()
-    raw = (_get_setting('device_groups', '') or '').strip()
-    current = [g.strip() for g in raw.split(',') if g.strip()]
-    if name not in current:
-        return jsonify({'ok': True, 'groups': [g for g in current]})
-    current = [g for g in current if g != name]
-    _set_setting('device_groups', ','.join(current))
-    return jsonify({'ok': True, 'groups': current})
-
-
-def _check_port_open(ip: str, port: int, timeout: float = 1.0) -> bool:
-    try:
-        import socket
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        r = s.connect_ex((ip, port))
-        s.close()
-        return r == 0
-    except Exception:
-        return False
-
-
 def _iter_ip_ranges(raw: str, limit: int = 256):
     """解析多行 IP/IP段/CIDR，yield 最多 limit 个 IP 字符串。"""
     import ipaddress
@@ -2383,46 +1674,6 @@ def _iter_ip_ranges(raw: str, limit: int = 256):
     # 去重
     for ip in dict.fromkeys(ips):
         yield ip
-
-
-@app.route('/api/devices/discover', methods=['POST'])
-def discover_devices():
-    """设备发现：扫描 IP 列表或 IP 段，检测 22/23 端口是否开放，返回可达结果供批量添加"""
-    data = request.get_json(force=True, silent=True) or {}
-    ips = []
-    if data.get('ip_range'):
-        r = (data.get('ip_range') or '').strip()
-        if '-' in r:
-            a, b = r.split('-', 1)
-            a, b = a.strip(), b.strip()
-            try:
-                import ipaddress
-                start = int(ipaddress.ip_address(a))
-                end = int(ipaddress.ip_address(b))
-                for i in range(start, min(end + 1, start + 256)):
-                    ips.append(str(ipaddress.ip_address(i)))
-            except Exception:
-                pass
-        else:
-            try:
-                import ipaddress
-                n = ipaddress.ip_network(r, strict=False)
-                for addr in list(n.hosts())[:256]:
-                    ips.append(str(addr))
-            except Exception:
-                pass
-    if data.get('ips'):
-        ips.extend([x.strip() for x in (data.get('ips') or '').splitlines() if x.strip()])
-    ips = list(dict.fromkeys(ips))[:128]
-    if not ips:
-        return jsonify({'error': '请提供 ip_range（如 192.168.1.1-192.168.1.20 或 192.168.1.0/24）或 ips（每行一个 IP）'}), 400
-    results = []
-    for ip in ips:
-        ssh_open = _check_port_open(ip, 22)
-        telnet_open = _check_port_open(ip, 23)
-        if ssh_open or telnet_open:
-            results.append({'ip': ip, 'ssh_open': ssh_open, 'telnet_open': telnet_open})
-    return jsonify({'results': results, 'scanned': len(ips)})
 
 
 @app.route('/api/discovery/settings', methods=['GET', 'PUT'])
@@ -3080,8 +2331,6 @@ def _start_full_backup(run_type='manual', executor=''):
             # 在线程中使用数据库前，先进入应用上下文，避免 Flask-SQLAlchemy 报错
             with app.app_context():
                 type_configs = _build_type_configs()
-            # 为了行为与「单台立即备份」保持一致，并避免多线程可能带来的问题，
-            # 这里改为在当前后台线程中串行执行所有设备备份（对用户仍然是异步的）。
             run_backup_task(
                 device_list,
                 CONFIGS_DIR,
@@ -3097,6 +2346,7 @@ def _start_full_backup(run_type='manual', executor=''):
                 app_context=None,
                 type_configs=type_configs,
                 fallback_to_second=fallback_flag,
+                max_workers=thread_num,
             )
         except Exception as e:
             # 兜底：如果备份线程在开始前就异常退出，至少记录一条失败日志，避免任务看起来“什么都没发生”
@@ -3182,7 +2432,7 @@ def _start_full_backup(run_type='manual', executor=''):
                     app.logger.warning('备份任务记录保存失败: %s', e)
                 # 备份完成后计算「配置变动」并写入数据库
                 try:
-                    _save_config_changes_to_db()
+                    config_files_service.save_config_changes_to_db()
                 except Exception as e:
                     app.logger.warning('保存配置变动到数据库失败: %s', e)
                 # 备份任务完成告警（不管有无失败都通知；有失败/未执行时附列表）
@@ -3444,7 +2694,7 @@ def run_backup_one(device_id):
                         })
                 # 单台备份完成后计算「配置变动」并写入数据库
                 try:
-                    _save_config_changes_to_db()
+                    config_files_service.save_config_changes_to_db()
                 except Exception as e:
                     app.logger.warning('保存配置变动到数据库失败: %s', e)
         except Exception as e:
@@ -3498,7 +2748,7 @@ def run_backup_one(device_id):
                         job.end_time = datetime.utcnow().isoformat() + 'Z'
                         db.session.commit()
                     try:
-                        _save_config_changes_to_db()
+                        config_files_service.save_config_changes_to_db()
                     except Exception:
                         pass
             except Exception:
@@ -3891,128 +3141,6 @@ def terminal_close(device_id):
     return jsonify({'ok': True})
 
 
-# ---------- 日志 ----------
-@app.route('/api/logs', methods=['GET'])
-def list_logs():
-    """备份日志列表。支持 fail_only=1（仅失败）、date=YYYY-MM-DD（按日）、job_id=xxx（某次任务的失败日志）。"""
-    page = request.args.get('page', 1, type=int)
-    default_pp = int(_get_setting('log_per_page_default', '50') or '50')
-    per_page = min(request.args.get('per_page', default_pp, type=int), 100)
-    hostname = request.args.get('hostname', '').strip()
-    ip = request.args.get('ip', '').strip()
-    search = request.args.get('search', '').strip()  # 同时匹配主机名或管理 IP
-    status = request.args.get('status', '').strip()
-    device_id = request.args.get('device_id', type=int)
-    fail_only = request.args.get('fail_only', '') in ('1', 'true', 'yes')
-    date_str = request.args.get('date', '').strip()  # YYYY-MM-DD，按配置时区该日 00:00~24:00 过滤
-    job_id = request.args.get('job_id', '').strip()
-    sort_by = (request.args.get('sort_by') or 'created_at').strip()
-    sort_dir = (request.args.get('sort_dir') or 'desc').strip().lower()
-    if sort_dir not in ('asc', 'desc'):
-        sort_dir = 'desc'
-
-    order_cols = {
-        'created_at': BackupLog.created_at,
-        'hostname': BackupLog.hostname,
-        'ip': BackupLog.ip,
-        'device_type': BackupLog.device_type,
-        'status': BackupLog.status,
-        'duration_seconds': BackupLog.duration_seconds,
-    }
-    order_col = order_cols.get(sort_by, BackupLog.created_at)
-    if sort_dir == 'desc':
-        q = BackupLog.query.order_by(order_col.desc())
-    else:
-        q = BackupLog.query.order_by(order_col.asc())
-
-    if search:
-        from sqlalchemy import or_
-        q = q.filter(
-            or_(
-                BackupLog.hostname.ilike(f'%{search}%'),
-                BackupLog.ip.ilike(f'%{search}%'),
-            )
-        )
-    else:
-        if hostname:
-            q = q.filter(BackupLog.hostname.ilike(f'%{hostname}%'))
-        if ip:
-            q = q.filter(BackupLog.ip.ilike(f'%{ip}%'))
-    if device_id:
-        dev = Device.query.get(device_id)
-        if dev:
-            q = q.filter(BackupLog.hostname == dev.hostname)
-    if status:
-        q = q.filter(BackupLog.status == status)
-
-    if fail_only:
-        q = q.filter(BackupLog.status != 'OK')
-    if date_str:
-        try:
-            from datetime import timezone as dt_timezone
-            ZoneInfo = _get_zoneinfo()
-            tz_name = _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE
-            if ZoneInfo:
-                tz = ZoneInfo(tz_name)
-                day_start = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=tz)
-                day_end = day_start + timedelta(days=1)
-                day_start_utc = day_start.astimezone(dt_timezone.utc).replace(tzinfo=None)
-                day_end_utc = day_end.astimezone(dt_timezone.utc).replace(tzinfo=None)
-                q = q.filter(BackupLog.created_at >= day_start_utc, BackupLog.created_at < day_end_utc)
-        except Exception:
-            pass
-    if job_id:
-        run = BackupJobRun.query.get(job_id)
-        if run and run.start_time and run.end_time:
-            try:
-                from datetime import timezone as dt_timezone
-                st = datetime.fromisoformat((run.start_time or '').replace('Z', '+00:00'))
-                et = datetime.fromisoformat((run.end_time or '').replace('Z', '+00:00'))
-                if getattr(st, 'tzinfo', None):
-                    st = st.astimezone(dt_timezone.utc).replace(tzinfo=None)
-                if getattr(et, 'tzinfo', None):
-                    et = et.astimezone(dt_timezone.utc).replace(tzinfo=None)
-                q = q.filter(
-                    BackupLog.created_at >= st,
-                    BackupLog.created_at <= et,
-                    BackupLog.status != 'OK',
-                )
-            except Exception:
-                pass
-
-    pagination = q.paginate(page=page, per_page=per_page)
-    timezone = _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE
-    return jsonify({
-        'items': [x.to_dict() for x in pagination.items],
-        'total': pagination.total,
-        'page': page,
-        'per_page': per_page,
-        'timezone': timezone,
-        'sort_by': sort_by,
-        'sort_dir': sort_dir,
-    })
-
-
-# ---------- 设备历史备份 ----------
-@app.route('/api/devices/<int:pk>/history')
-def device_backup_history(pk):
-    """某设备的备份历史（按 hostname 查日志）"""
-    dev = Device.query.get_or_404(pk)
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 20, type=int), 50)
-    q = BackupLog.query.filter(BackupLog.hostname == dev.hostname).order_by(BackupLog.created_at.desc())
-    pagination = q.paginate(page=page, per_page=per_page)
-    timezone = _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE
-    return jsonify({
-        'hostname': dev.hostname,
-        'items': [x.to_dict() for x in pagination.items],
-        'total': pagination.total,
-        'page': page,
-        'per_page': per_page,
-        'timezone': timezone,
-    })
-
-
 # ---------- 页脚（全局）：渲染时注入，首屏即有数据 ----------
 @app.context_processor
 def inject_footer_vars():
@@ -4024,7 +3152,7 @@ def inject_footer_vars():
         if not isinstance(client_ip, str):
             client_ip = str(client_ip)
         logo_file = _get_setting('logo_file', '') or ''
-        logo_url = url_for('logo') if logo_file else ''
+        logo_url = url_for('settings_assets.logo') if logo_file else ''
         return {
             # 系统名称：用于顶部品牌区与登录页展示
             'system_name': _get_setting('system_name', '配置备份中心') or '配置备份中心',
@@ -4053,1583 +3181,111 @@ def inject_footer_vars():
         }
 
 
-@app.route('/api/footer-info')
-def footer_info():
-    """页脚所需：来访者 IP、时区、自定义文案（版权/备案号等）"""
-    _ensure_tables()
-    raw = request.headers.get('X-Forwarded-For') or request.headers.get('X-Real-IP') or (getattr(request, 'remote_addr', None) or '')
-    client_ip = (raw.split(',')[0].strip() if isinstance(raw, str) and ',' in raw else raw) or ''
-    if not isinstance(client_ip, str):
-        client_ip = str(client_ip)
-    return jsonify({
-        'client_ip': client_ip,
-        'timezone': _get_setting('timezone', DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE,
-        'footer_text': _get_setting('footer_text', '') or '',
-    })
-
-
-@app.route('/api/settings/logo', methods=['POST', 'DELETE'])
-def settings_logo():
-    """上传或删除系统 Logo（仅允许有全局设置权限的用户操作）。"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权修改全局设置，请使用全局用户名登录。'}), 403
-    _ensure_tables()
-    # 删除 Logo
-    if request.method == 'DELETE':
-        filename = _get_setting('logo_file', '') or ''
-        if filename:
-            safe_name = os.path.basename(filename)
-            file_path = os.path.join(LOGO_DIR, safe_name)
-            if os.path.isfile(file_path):
-                try:
-                    os.unlink(file_path)
-                except OSError:
-                    pass
-        _set_setting('logo_file', '')
-        _write_audit('update_settings', resource_type='settings', resource_id='', detail='logo reset to default')
-        return jsonify({'ok': True})
-
-    # 上传 Logo
-    file = request.files.get('file')
-    if not file or file.filename == '':
-        return jsonify({'error': '未选择文件。'}), 400
-    # 简单校验扩展名
-    name = file.filename or ''
-    ext = os.path.splitext(name)[1].lower()
-    if ext not in ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico'):
-        return jsonify({'error': '仅支持 PNG/JPG/GIF/WebP/ICO 格式的图片。'}), 400
-    # 限制大小（约 512KB）
-    file.stream.seek(0, os.SEEK_END)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > 512 * 1024:
-        return jsonify({'error': 'Logo 文件过大，请控制在 512KB 以内。'}), 400
-    os.makedirs(LOGO_DIR, exist_ok=True)
-    # 超过 64×64 时按比例缩小到 64×64 以内（不拉伸）；在 64×64 以内则保持原尺寸
-    try:
-        from PIL import Image
-        file.stream.seek(0)
-        img = Image.open(file.stream).convert('RGBA')
-        w, h = img.size
-        if w > LOGO_MAX_SIZE[0] or h > LOGO_MAX_SIZE[1]:
-            img.thumbnail(LOGO_MAX_SIZE, Image.Resampling.LANCZOS)
-            save_ext = '.png'
-        else:
-            save_ext = ext
-        new_name = datetime.utcnow().strftime('%Y%m%d%H%M%S') + save_ext
-        dest_path = os.path.join(LOGO_DIR, new_name)
-        old = _get_setting('logo_file', '') or ''
-        if old:
-            old_path = os.path.join(LOGO_DIR, os.path.basename(old))
-            if os.path.isfile(old_path):
-                try:
-                    os.unlink(old_path)
-                except OSError:
-                    pass
-        fmt_map = {'.png': 'PNG', '.jpg': 'JPEG', '.jpeg': 'JPEG', '.gif': 'GIF', '.webp': 'WEBP', '.ico': 'PNG'}
-        fmt = fmt_map.get(save_ext, 'PNG')
-        if fmt == 'JPEG':
-            img.convert('RGB').save(dest_path, 'JPEG', quality=90)
-        else:
-            img.save(dest_path, fmt)
-    except ImportError:
-        return jsonify({'error': 'Logo 尺寸处理需要安装 Pillow，请执行 pip install Pillow。'}), 500
-    except Exception:
-        file.stream.seek(0)
-        new_name = datetime.utcnow().strftime('%Y%m%d%H%M%S') + ext
-        dest_path = os.path.join(LOGO_DIR, new_name)
-        old = _get_setting('logo_file', '') or ''
-        if old:
-            old_path = os.path.join(LOGO_DIR, os.path.basename(old))
-            if os.path.isfile(old_path):
-                try:
-                    os.unlink(old_path)
-                except OSError:
-                    pass
-        file.save(dest_path)
-    _set_setting('logo_file', new_name)
-    _write_audit('update_settings', resource_type='settings', resource_id='', detail='logo updated')
-    return jsonify({'ok': True, 'logo_url': url_for('logo')})
-
-@app.route('/logo')
-def logo():
-    """返回当前自定义 Logo 文件（若存在）。"""
-    _ensure_tables()
-    filename = _get_setting('logo_file', '') or ''
-    if not filename:
-        return ('', 404)
-    safe_name = os.path.basename(filename)
-    dir_path = LOGO_DIR
-    file_path = os.path.join(dir_path, safe_name)
-    if not os.path.isfile(file_path):
-        return ('', 404)
-    return send_from_directory(dir_path, safe_name)
-
-
-# ---------- 设置 ----------
-@app.route('/api/settings', methods=['GET'])
-def get_settings():
-    if _current_role() == 'viewer':
-        return jsonify({'error': '只读用户无权访问系统设置'}), 403
-    # 自动发现类型关键字：若用户尚未自定义，则使用一份内置规则展示给前端
-    discovery_type_keywords = _get_setting('discovery_type_keywords', '') or ''
-    if not discovery_type_keywords:
-        # 使用你提供的内置默认规则
-        discovery_type_keywords = "\n".join([
-            "Cisco=Cisco,IOS,ISR,ASR,NCS",
-            "Juniper=Juniper,JUNOS",
-            "Huawei=Huawei,FutureMatrix,VRP",
-            "H3C=H3C",
-            "RouterOS=RouterOS,MikroTik,CHR",
-        ])
-
-    return jsonify({
-        # 全局 Telnet/SSH 账号默认留空，仅从设置中读取（密码永不回传明文）
-        'username': _get_setting('username', ''),
-        'password': '',
-        'password_configured': _setting_has_secret_value('password'),
-        'system_name': _get_setting('system_name', '配置备份中心'),
-        'backup_frequency': _get_setting('backup_frequency', 'daily') or 'daily',
-        'default_connection_type': _get_setting('default_connection_type', DEFAULT_CONNECTION_TYPE).upper() or 'SSH',
-        'backup_retention_days': _get_setting('backup_retention_days', str(BACKUP_RETENTION_DAYS)),
-        'timezone': _get_setting('timezone', DEFAULT_TIMEZONE),
-        'language': _get_setting('language', 'zh') or 'zh',
-        'footer_text': _get_setting('footer_text', ''),
-        'logo_enabled': '1' if _get_setting('logo_file', '') else '0',
-        'logo_url': url_for('logo') if _get_setting('logo_file', '') else '',
-        'logo_enabled': bool(_get_setting('logo_file', '') or ''),
-        # 通用：会话与安全
-        'session_timeout_minutes': _get_setting('session_timeout_minutes', '0'),
-        'login_lockout_attempts': _get_setting('login_lockout_attempts', '0'),
-        'login_lockout_minutes': _get_setting('login_lockout_minutes', '15'),
-        'password_min_length': _get_setting('password_min_length', '6'),
-        'password_require_digit': _get_setting('password_require_digit', '0'),
-        'password_require_upper': _get_setting('password_require_upper', '0'),
-        'password_require_lower': _get_setting('password_require_lower', '0'),
-        'password_require_special': _get_setting('password_require_special', '0'),
-        'device_per_page_default': _get_setting('device_per_page_default', '50'),
-        'log_per_page_default': _get_setting('log_per_page_default', '50'),
-        # 自动发现 / SNMP 全局设置
-        'snmp_version': _get_setting('snmp_version', '2c'),
-        'snmp_community': _get_setting('snmp_community', 'public'),
-        'snmp_timeout_ms': _get_setting('snmp_timeout_ms', '2000'),
-        'snmp_retries': _get_setting('snmp_retries', '1'),
-        # 备份：超时/线程/端口/告警
-        'backup_timeout_seconds': _get_setting('backup_timeout_seconds', '30'),
-        'backup_read_timeout_seconds': _get_setting('backup_read_timeout_seconds', '30'),
-        'backup_thread_num': _get_setting('backup_thread_num', str(BACKUP_THREAD_NUM)),
-        'backup_connection_fallback': _get_setting('backup_connection_fallback', '0'),
-        'ssh_port': _get_setting('ssh_port', str(SSH_PORT)),
-        'telnet_port': _get_setting('telnet_port', '23'),
-        'alert_webhook_url': _get_setting('alert_webhook_url', ''),
-        'alert_smtp_host': _get_setting('alert_smtp_host', ''),
-        'alert_smtp_port': _get_setting('alert_smtp_port', '587'),
-        'alert_smtp_user': _get_setting('alert_smtp_user', ''),
-        'alert_smtp_password': '',
-        'alert_smtp_password_configured': _setting_has_secret_value('alert_smtp_password'),
-        'alert_smtp_from': _get_setting('alert_smtp_from', ''),
-        'alert_smtp_use_tls': _get_setting('alert_smtp_use_tls', '1'),
-        'alert_email_to': _get_setting('alert_email_to', ''),
-        'alert_on_backup_fail_email': _get_setting('alert_on_backup_fail_email', '0'),
-        'alert_on_backup_fail_webhook': _get_setting('alert_on_backup_fail_webhook', '1'),
-        'alert_on_discovery_new_email': _get_setting('alert_on_discovery_new_email', '0'),
-        'alert_on_discovery_new_webhook': _get_setting('alert_on_discovery_new_webhook', '0'),
-        'api_tokens': '',
-        'api_tokens_configured': _setting_has_secret_value('api_tokens'),
-        # 自动发现设置
-        'discovery_frequency': _get_setting('discovery_frequency', 'twice_daily'),
-        'discovery_type_keywords': discovery_type_keywords,
-        # 主机名过滤：若未设置则前端输入框留空，由 placeholder 提示「.」
-        'discovery_hostname_split_char': _get_setting('discovery_hostname_split_char', ''),
-        # 默认「取前 1 段」
-        'discovery_hostname_segment_index': _get_setting('discovery_hostname_segment_index', '1'),
-        # 添加设备唯一性：hostname | ip
-        'discovery_unique_by': _get_setting('discovery_unique_by', 'hostname') or 'hostname',
-        # LDAP
-        'ldap_enabled': _get_setting('ldap_enabled', '0'),
-        'ldap_server': _get_setting('ldap_server', ''),
-        'ldap_base_dn': _get_setting('ldap_base_dn', ''),
-        'ldap_bind_dn': _get_setting('ldap_bind_dn', ''),
-        'ldap_bind_password': '',
-        'ldap_bind_password_configured': _setting_has_secret_value('ldap_bind_password'),
-        'ldap_user_filter': _get_setting('ldap_user_filter', '(uid={username})'),
-        'can_edit_settings': _can_edit_settings(),
-    })
-
-
-# ---------- 用户管理（基础版：列表 + 更新角色/启用状态） ----------
-@app.route('/api/users', methods=['GET'])
-def list_users_api():
-    """用户列表：所有登录用户可查看（只读用户可见）；内置超级管理员永远排最前"""
-    from sqlalchemy import case
-    users = User.query.order_by(
-        case((User.username == SUPER_ADMIN_USERNAME, 0), else_=1),
-        User.created_at.desc(),
-    ).all()
-    return jsonify({
-        'items': [u.to_dict() for u in users],
-        'can_edit_settings': _can_edit_settings(),
-    })
-
-
-@app.route('/api/users', methods=['POST'])
-def create_user_api():
-    """新建本地账号：仅管理员可操作"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权新建用户，请使用管理员账号登录。'}), 403
-    data = request.get_json(force=True, silent=True) or {}
-    username = (data.get('username') or '').strip()
-    if not username:
-        return jsonify({'error': '用户名不能为空。'}), 400
-    if username == SUPER_ADMIN_USERNAME:
-        return jsonify({'error': '内置超级管理员账号已存在，无需重复创建。'}), 400
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': '该用户名已存在，请换一个。'}), 400
-    role = (data.get('role') or 'viewer').strip()
-    if role not in ('admin', 'ops', 'viewer'):
-        return jsonify({'error': '角色不合法，仅支持 admin / ops / viewer。'}), 400
-    is_active = bool(data.get('is_active', True))
-    password = (data.get('password') or '').strip()
-    if not password:
-        return jsonify({'error': '请为本地账号设置登录密码。'}), 400
-    ok_pwd, msg_pwd = _check_password_policy(password)
-    if not ok_pwd:
-        return jsonify({'error': msg_pwd}), 400
-    display_name = (str(data.get('display_name') or '')[:128]) or None
-    email = (str(data.get('email') or '').strip())[:128] or None
-    phone = (str(data.get('phone') or '').strip())[:32] or None
-    allowed_grps = (str(data.get('allowed_groups') or '').strip())[:512] or None
-    u = User(
-        username=username[:128],
-        display_name=display_name,
-        email=email,
-        phone=phone,
-        source='local',
-        role=role,
-        is_active=is_active,
-        allowed_groups=allowed_grps,
-    )
-    u.set_password(password)
-    db.session.add(u)
-    db.session.commit()
-    return jsonify(u.to_dict()), 201
-
-
-@app.route('/api/users/<int:user_id>', methods=['PUT'])
-def update_user_api(user_id):
-    """更新用户角色与启用状态：仅管理员可操作"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权修改用户信息，请使用管理员账号登录。'}), 403
-    u = User.query.get_or_404(user_id)
-    data = request.get_json(force=True, silent=True) or {}
-
-    # 目标角色与启用状态（若未提供则使用原值），用于判断是否会导致系统无管理员
-    new_role_raw = (data.get('role') or '').strip()
-    if new_role_raw and new_role_raw not in ('admin', 'ops', 'viewer'):
-        return jsonify({'error': '角色不合法，仅支持 admin / ops / viewer。'}), 400
-    target_role = new_role_raw or (u.role or 'viewer')
-    target_active = bool(data['is_active']) if 'is_active' in data else bool(u.is_active)
-
-    # 如果当前是「启用状态的管理员」且本次修改会使其不再是启用管理员，需要检查是否还有其他启用管理员
-    if (u.role == 'admin' and u.is_active) and (target_role != 'admin' or not target_active):
-        other_admins = (
-            User.query
-            .filter(User.id != u.id, User.role == 'admin', User.is_active == True)  # noqa: E712
-            .count()
-        )
-        if other_admins == 0:
-            return jsonify({'error': '系统中至少需要保留一个启用状态的管理员账号，此操作会导致没有任何管理员，请先为其他用户设置管理员角色。'}), 400
-
-    # 通过校验后再真正写入
-    if new_role_raw:
-        u.role = new_role_raw
-
-    if 'is_active' in data:
-        u.is_active = target_active
-
-    if 'display_name' in data:
-        u.display_name = (str(data.get('display_name') or '')[:128]) or None
-    if 'email' in data:
-        u.email = (str(data.get('email') or '').strip())[:128] or None
-    if 'phone' in data:
-        u.phone = (str(data.get('phone') or '').strip())[:32] or None
-    if 'allowed_groups' in data:
-        u.allowed_groups = (str(data.get('allowed_groups') or '').strip())[:512] or None
-
-    # 本地账号支持在用户管理中重置密码；LDAP 账号不允许设置本地密码
-    if 'password' in data:
-        raw = (data.get('password') or '').strip()
-        if raw:
-            if (u.source or 'local') != 'local':
-                return jsonify({'error': '不能为 LDAP 用户设置本地密码。'}), 400
-            ok_pwd, msg_pwd = _check_password_policy(raw)
-            if not ok_pwd:
-                return jsonify({'error': msg_pwd}), 400
-            u.set_password(raw)
-
-    db.session.commit()
-    return jsonify(u.to_dict())
-
-
-@app.route('/api/users/<int:user_id>', methods=['DELETE'])
-def delete_user_api(user_id):
-    """删除用户：仅管理员可操作，且必须保留至少一个启用的管理员"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权删除用户，请使用管理员账号登录。'}), 403
-    u = User.query.get_or_404(user_id)
-    # 内置超级管理员账号禁止删除
-    if u.username == SUPER_ADMIN_USERNAME:
-        return jsonify({'error': '内置超级管理员账号不能删除。'}), 400
-    # 若要删除的是一个启用状态的管理员，需要检查是否还有其他启用管理员
-    if u.role == 'admin' and u.is_active:
-        other_admins = (
-            User.query
-            .filter(User.id != u.id, User.role == 'admin', User.is_active == True)  # noqa: E712
-            .count()
-        )
-        if other_admins == 0:
-            return jsonify({'error': '系统中至少需要保留一个启用状态的管理员账号，无法删除最后一个管理员。'}), 400
-    db.session.delete(u)
-    db.session.commit()
-    return jsonify({'ok': True})
-
-
-@app.route('/api/device-types', methods=['GET'])
-def list_device_types_api():
-    """设备类型列表（供前端下拉使用，仅返回启用的类型）"""
-    _ensure_tables()
-    # 若 query 参数 include_disabled=1，则返回全部，否则仅返回启用的类型
-    include_disabled = request.args.get('include_disabled') in ('1', 'true', 'yes')
-    q = DeviceTypeConfig.query
-    if not include_disabled:
-        q = q.filter_by(enabled=True)
-    types = q.order_by(DeviceTypeConfig.sort_order.asc(), DeviceTypeConfig.type_code.asc()).all()
-    items = [t.to_dict() for t in types]
-    # 内置类型的参数同步为当前内置默认值，保证设备类型设置输入框与内置驱动一致
-    builtin_codes = {'Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'}
-    for it in items:
-        code = (it.get('type_code') or '').strip()
-        if code in builtin_codes:
-            default_cfg = _get_builtin_type_config(code)
-            if default_cfg:
-                it['backup_config'] = default_cfg.get('backup_config') or {}
-                it['connection_config'] = default_cfg.get('connection_config') or {}
-    return jsonify({'items': items, 'can_edit_settings': _can_edit_settings()})
-
-
-@app.route('/api/device-types', methods=['POST'])
-def create_device_type_api():
-    """新增设备类型，仅允许有设置权限的用户操作"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权管理设备类型，请使用管理员账号登录。'}), 403
-    _ensure_tables()
-    data = request.get_json(force=True, silent=True) or {}
-    type_code = (data.get('type_code') or '').strip()
-    display_name = (data.get('display_name') or '').strip()
-    driver_type = (data.get('driver_type') or 'generic').strip() or 'generic'
-    driver_module = (data.get('driver_module') or '').strip() or None
-    enabled = bool(data.get('enabled', True))
-    backup_config = data.get('backup_config') or {}
-    connection_config = data.get('connection_config') or {}
-    if not type_code:
-        return jsonify({'error': '类型代码不能为空。'}), 400
-    if not display_name:
-        return jsonify({'error': '显示名称不能为空。'}), 400
-    if DeviceTypeConfig.query.filter_by(type_code=type_code).first():
-        return jsonify({'error': '该类型代码已存在，请勿重复创建。'}), 400
-    if driver_type not in ('builtin', 'generic', 'custom'):
-        return jsonify({'error': '驱动类型不合法，仅支持 builtin/generic/custom。'}), 400
-    from sqlalchemy import func
-    max_order = db.session.query(func.max(DeviceTypeConfig.sort_order)).scalar()
-    sort_order = (max_order or 0) + 1
-    cfg = DeviceTypeConfig(
-        type_code=type_code,
-        display_name=display_name,
-        driver_type=driver_type,
-        driver_module=driver_module,
-        sort_order=sort_order,
-        enabled=enabled,
-    )
-    try:
-        if isinstance(backup_config, dict):
-            cfg.set_backup_config(backup_config)
-        if isinstance(connection_config, dict):
-            cfg.set_connection_config(connection_config)
-        db.session.add(cfg)
-        db.session.commit()
-        return jsonify(cfg.to_dict()), 201
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return jsonify({'error': '保存设备类型失败: %s' % e}), 500
-
-
-@app.route('/api/device-types/<int:type_id>', methods=['PUT'])
-def update_device_type_api(type_id):
-    """更新设备类型配置，仅允许有设置权限的用户操作"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权管理设备类型，请使用管理员账号登录。'}), 403
-    _ensure_tables()
-    cfg = DeviceTypeConfig.query.get_or_404(type_id)
-    data = request.get_json(force=True, silent=True) or {}
-    # type_code 不允许随意修改，否则会导致已有设备记录关联出错
-    display_name = (data.get('display_name') or cfg.display_name or '').strip()
-    driver_type = (data.get('driver_type') or cfg.driver_type or 'generic').strip() or 'generic'
-    driver_module = (data.get('driver_module') or cfg.driver_module or '').strip() or None
-    sort_order = data.get('sort_order', cfg.sort_order)
-    enabled = bool(data.get('enabled', cfg.enabled))
-    backup_config = data.get('backup_config')
-    connection_config = data.get('connection_config')
-    if not display_name:
-        return jsonify({'error': '显示名称不能为空。'}), 400
-    if driver_type not in ('builtin', 'generic', 'custom'):
-        return jsonify({'error': '驱动类型不合法，仅支持 builtin/generic/custom。'}), 400
-    try:
-        sort_order = int(sort_order)
-    except (TypeError, ValueError):
-        sort_order = cfg.sort_order or 0
-    cfg.display_name = display_name
-    cfg.driver_type = driver_type
-    cfg.driver_module = driver_module
-    cfg.sort_order = sort_order
-    cfg.enabled = enabled
-    if isinstance(backup_config, dict):
-        cfg.set_backup_config(backup_config)
-    if isinstance(connection_config, dict):
-        cfg.set_connection_config(connection_config)
-    try:
-        db.session.commit()
-        return jsonify(cfg.to_dict())
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return jsonify({'error': '更新设备类型失败: %s' % e}), 500
-
-
-@app.route('/api/device-types/<int:type_id>', methods=['DELETE'])
-def delete_device_type_api(type_id):
-    """删除设备类型：仅当没有设备使用该类型时允许删除"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权管理设备类型，请使用管理员账号登录。'}), 403
-    _ensure_tables()
-    cfg = DeviceTypeConfig.query.get_or_404(type_id)
-    # 内置类型（核心厂商）禁止删除，只允许禁用
-    builtin_codes = {'Cisco', 'Juniper', 'Huawei', 'H3C', 'RouterOS'}
-    if (cfg.type_code or '').strip() in builtin_codes:
-        return jsonify({'error': '内置设备类型不可删除，如需隐藏可在界面中禁用。'}), 400
-    # 检查是否有设备正在使用该类型
-    used_count = Device.query.filter_by(device_type=cfg.type_code).count()
-    if used_count > 0:
-        return jsonify({'error': '当前仍有 %d 台设备使用该类型，无法删除。可先在设备列表中修改设备类型，或仅将该类型禁用。' % used_count}), 400
-    try:
-        db.session.delete(cfg)
-        db.session.commit()
-        return jsonify({'ok': True})
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return jsonify({'error': '删除设备类型失败: %s' % e}), 500
-
-@app.route('/api/settings', methods=['PUT'])
-def update_settings():
-    # 权限控制：只有通过本地全局用户名登录的用户才能修改设置
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权修改全局设置，请使用全局用户名登录。'}), 403
-
-    data = request.get_json(force=True, silent=True) or {}
-    if data.get('username') is not None:
-        _set_setting('username', str(data['username']))
-    # 全局默认密码：GET 不返回明文；忽略仅含空串的旧客户端提交，避免误清空
-    if data.get('password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
-        _set_setting('password', '')
-    elif str(data.get('password') or '').strip():
-        _set_setting('password', str(data.get('password') or '').strip())
-    if data.get('backup_frequency') is not None:
-        _set_setting('backup_frequency', str(data['backup_frequency']))
-    if data.get('default_connection_type') is not None:
-        ct = str(data['default_connection_type']).strip().upper()
-        _set_setting('default_connection_type', ct if ct in ('TELNET', 'SSH') else 'TELNET')
-    if 'backup_connection_fallback' in data:
-        _set_setting(
-            'backup_connection_fallback',
-            '1' if data.get('backup_connection_fallback') in (True, 1, '1', 'true', 'on') else '0'
-        )
-    if data.get('system_name') is not None:
-        # 系统名称允许用户自定义，做长度限制并提供合理默认值
-        name = (str(data.get('system_name') or '').strip())[:100]
-        _set_setting('system_name', name or '配置备份中心')
-    if data.get('backup_retention_days') is not None:
-        try:
-            v = int(data['backup_retention_days'])
-            _set_setting('backup_retention_days', str(max(0, min(3650, v))))
-        except (TypeError, ValueError):
-            _set_setting('backup_retention_days', str(BACKUP_RETENTION_DAYS))
-    if data.get('timezone') is not None:
-        _set_setting('timezone', str(data['timezone']).strip() or DEFAULT_TIMEZONE)
-    if data.get('language') is not None:
-        lang = (str(data.get('language') or 'zh').strip().lower())
-        _set_setting('language', lang if lang in ('zh', 'en') else 'zh')
-    # 页脚文案：每次保存都写入（保证可重复保存）
-    _set_setting('footer_text', (str(data.get('footer_text', '') or '').strip())[:500])
-    # LDAP 参数
-    if 'ldap_enabled' in data:
-        enabled = str(data.get('ldap_enabled') or '0').strip()
-        _set_setting('ldap_enabled', '1' if enabled in ('1', 'true', 'on', 'yes') else '0')
-    if 'ldap_server' in data:
-        _set_setting('ldap_server', str(data.get('ldap_server') or '').strip())
-    if 'ldap_base_dn' in data:
-        _set_setting('ldap_base_dn', str(data.get('ldap_base_dn') or '').strip())
-    if 'ldap_bind_dn' in data:
-        _set_setting('ldap_bind_dn', str(data.get('ldap_bind_dn') or '').strip())
-    if data.get('ldap_bind_password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
-        _set_setting('ldap_bind_password', '')
-    elif str(data.get('ldap_bind_password') or '').strip():
-        _set_setting('ldap_bind_password', str(data.get('ldap_bind_password') or '').strip())
-    if 'ldap_user_filter' in data:
-        _set_setting('ldap_user_filter', str(data.get('ldap_user_filter') or '(uid={username})').strip())
-    # 通用：会话与安全
-    if data.get('session_timeout_minutes') is not None:
-        v = data['session_timeout_minutes']
-        try:
-            n = int(v) if v != '' else 0
-            _set_setting('session_timeout_minutes', str(max(0, min(1440, n))))
-        except (TypeError, ValueError):
-            _set_setting('session_timeout_minutes', '0')
-    if data.get('login_lockout_attempts') is not None:
-        try:
-            n = int(data['login_lockout_attempts'])
-            _set_setting('login_lockout_attempts', str(max(0, min(20, n))))
-        except (TypeError, ValueError):
-            _set_setting('login_lockout_attempts', '0')
-    if data.get('login_lockout_minutes') is not None:
-        try:
-            n = int(data['login_lockout_minutes'])
-            _set_setting('login_lockout_minutes', str(max(0, min(120, n))))
-        except (TypeError, ValueError):
-            _set_setting('login_lockout_minutes', '15')
-    if data.get('password_min_length') is not None:
-        try:
-            n = int(data['password_min_length'])
-            _set_setting('password_min_length', str(max(6, min(32, n))) if n else '')
-        except (TypeError, ValueError):
-            _set_setting('password_min_length', '6')
-    for key in ('password_require_digit', 'password_require_upper', 'password_require_lower', 'password_require_special'):
-        if key in data:
-            _set_setting(key, '1' if data.get(key) in (True, 1, '1', 'true', 'on') else '0')
-    if data.get('device_per_page_default') is not None:
-        v = str(data.get('device_per_page_default') or '50').strip()
-        if v in ('20', '50', '100', '200'):
-            _set_setting('device_per_page_default', v)
-    if data.get('log_per_page_default') is not None:
-        v = str(data.get('log_per_page_default') or '50').strip()
-        if v in ('20', '50', '100'):
-            _set_setting('log_per_page_default', v)
-    # 备份：超时/线程/端口/Webhook
-    if data.get('backup_timeout_seconds') is not None:
-        try:
-            n = int(data['backup_timeout_seconds'])
-            _set_setting('backup_timeout_seconds', str(max(5, min(300, n))))
-        except (TypeError, ValueError):
-            _set_setting('backup_timeout_seconds', '30')
-    if data.get('backup_read_timeout_seconds') is not None:
-        try:
-            n = int(data['backup_read_timeout_seconds'])
-            _set_setting('backup_read_timeout_seconds', str(max(10, min(300, n))))
-        except (TypeError, ValueError):
-            _set_setting('backup_read_timeout_seconds', '30')
-    if data.get('backup_thread_num') is not None:
-        try:
-            n = int(data['backup_thread_num'])
-            _set_setting('backup_thread_num', str(max(1, min(50, n))))
-        except (TypeError, ValueError):
-            _set_setting('backup_thread_num', str(BACKUP_THREAD_NUM))
-    if data.get('ssh_port') is not None:
-        try:
-            n = int(data['ssh_port'])
-            _set_setting('ssh_port', str(max(1, min(65535, n))))
-        except (TypeError, ValueError):
-            _set_setting('ssh_port', str(SSH_PORT))
-    if data.get('telnet_port') is not None:
-        try:
-            n = int(data['telnet_port'])
-            _set_setting('telnet_port', str(max(1, min(65535, n))))
-        except (TypeError, ValueError):
-            _set_setting('telnet_port', '23')
-    if 'alert_webhook_url' in data:
-        _set_setting('alert_webhook_url', (str(data.get('alert_webhook_url') or '').strip())[:512])
-    # 告警设置
-    for key in ('alert_smtp_host', 'alert_smtp_user', 'alert_smtp_from', 'alert_email_to'):
-        if key in data:
-            _set_setting(key, str(data.get(key) or '').strip()[:256])
-    if data.get('alert_smtp_password_clear') in (True, 1, '1', 'true', 'on', 'yes'):
-        _set_setting('alert_smtp_password', '')
-    elif str(data.get('alert_smtp_password') or '').strip():
-        _set_setting('alert_smtp_password', str(data.get('alert_smtp_password') or '').strip()[:256])
-    if 'alert_smtp_port' in data:
-        try:
-            n = int(data.get('alert_smtp_port') or '587')
-            _set_setting('alert_smtp_port', str(max(1, min(65535, n))))
-        except (TypeError, ValueError):
-            _set_setting('alert_smtp_port', '587')
-    if 'alert_smtp_use_tls' in data:
-        _set_setting('alert_smtp_use_tls', '1' if data.get('alert_smtp_use_tls') in (True, 1, '1', 'true', 'on') else '0')
-    for key in ('alert_on_backup_fail_email', 'alert_on_backup_fail_webhook', 'alert_on_discovery_new_email', 'alert_on_discovery_new_webhook'):
-        if key in data:
-            _set_setting(key, '1' if data.get(key) in (True, 1, '1', 'true', 'on') else '0')
-    if data.get('api_tokens_clear') in (True, 1, '1', 'true', 'on', 'yes'):
-        _set_setting('api_tokens', '')
-    elif str(data.get('api_tokens') or '').strip():
-        _set_setting('api_tokens', (str(data.get('api_tokens') or '').strip())[:1024])
-
-    # 自动发现 / SNMP 全局设置
-    if 'snmp_version' in data:
-        version = str(data.get('snmp_version') or '2c').strip()
-        if version not in ('1', '2c', '3'):
-            version = '2c'
-        _set_setting('snmp_version', version)
-    if 'snmp_community' in data:
-        _set_setting('snmp_community', str(data.get('snmp_community') or 'public').strip())
-    if 'snmp_timeout_ms' in data:
-        try:
-            n = int(data.get('snmp_timeout_ms') or '2000')
-            # 前端限制 500–10000，这里再做一次兜底
-            _set_setting('snmp_timeout_ms', str(max(500, min(10000, n))))
-        except (TypeError, ValueError):
-            _set_setting('snmp_timeout_ms', '2000')
-    if 'snmp_retries' in data:
-        try:
-            n = int(data.get('snmp_retries') or '1')
-            _set_setting('snmp_retries', str(max(0, min(5, n))))
-        except (TypeError, ValueError):
-            _set_setting('snmp_retries', '1')
-
-    # 自动发现：设备类型关键字映射
-    if 'discovery_type_keywords' in data:
-        _set_setting('discovery_type_keywords', str(data.get('discovery_type_keywords') or '').strip())
-    # 自动发现：主机名过滤
-    if 'discovery_hostname_split_char' in data:
-        _set_setting('discovery_hostname_split_char', str(data.get('discovery_hostname_split_char') or '').strip()[:4])
-    if 'discovery_hostname_segment_index' in data:
-        try:
-            v = int(data.get('discovery_hostname_segment_index') or 1)
-            _set_setting('discovery_hostname_segment_index', str(max(1, min(10, v))))
-        except (TypeError, ValueError):
-            _set_setting('discovery_hostname_segment_index', '1')
-    if 'discovery_unique_by' in data:
-        v = (data.get('discovery_unique_by') or 'hostname').strip().lower()
-        if v not in ('hostname', 'ip'):
-            v = 'hostname'
-        _set_setting('discovery_unique_by', v)
-
-    # 自动发现：执行频率（只允许固定几种值）
-    if 'discovery_frequency' in data:
-        freq = str(data.get('discovery_frequency') or 'none').strip()
-        allowed = {'none', 'hourly', 'twice_daily', 'daily', 'weekly', 'custom'}
-        if freq not in allowed and len(freq.split()) < 5:
-            freq = 'none'
-        _set_setting('discovery_frequency', freq)
-
-    if data.get('backup_frequency') is not None or 'discovery_frequency' in data:
-        _reload_backup_schedule()
-    _write_audit('update_settings', resource_type='settings', resource_id='', detail='global settings updated')
-    return jsonify({'ok': True})
-
-
-@app.route('/api/settings/reset-defaults', methods=['POST'])
-def reset_settings_to_defaults():
-    """将所有系统设置恢复为系统默认参数值"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
-    defaults = _get_default_settings()
-    for key, value in defaults.items():
-        _set_setting(key, value if value is not None else '')
-    if defaults.get('logo_file') == '':
-        old = _get_setting('logo_file', '')
-        if old:
-            safe_name = os.path.basename(old)
-            path = os.path.join(LOGO_DIR, safe_name)
-            if os.path.isfile(path):
-                try:
-                    os.unlink(path)
-                except OSError:
-                    pass
-    _reload_backup_schedule()
-    _write_audit('reset_settings_defaults', resource_type='settings', resource_id='', detail='all settings reset to defaults')
-    return jsonify({'ok': True})
-
-
-@app.route('/api/settings/test-webhook', methods=['POST'])
-def test_webhook():
-    """发送一条测试告警到备份失败 Webhook URL，用于验证是否可达"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
-    data = request.get_json(silent=True) or {}
-    url = (data.get('url') or '').strip() or (_get_setting('alert_webhook_url', '') or '').strip()
-    if not url:
-        return jsonify({'error': '请先填写 Webhook URL'}), 400
-    if not url.startswith(('http://', 'https://')):
-        return jsonify({'error': 'URL 须以 http:// 或 https:// 开头'}), 400
-    import urllib.request
-    import urllib.error
-    body = _webhook_body_for_url(url, 'Hello!!!')
-    # 测试请求使用不验证 SSL 证书的 context，兼容自签名/内网证书
-    import ssl
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    try:
-        req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json; charset=utf-8'})
-        resp = urllib.request.urlopen(req, timeout=10, context=ssl_ctx)
-        status = resp.getcode() if hasattr(resp, 'getcode') else 200
-        app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, status)
-        _log_alert('test', 'webhook', url[:80], None, 'Hello!!!', 'success', None)
-        return jsonify({'ok': True, 'status': status, 'message': '已发送测试消息 Hello!!! 至 Webhook，HTTP %d' % status})
-    except urllib.error.HTTPError as e:
-        # 对方返回 4xx/5xx 仍视为 URL 可达、请求已送达
-        app.logger.info('Webhook 测试已发送: url=%s, status=%s', url, e.code)
-        _log_alert('test', 'webhook', url[:80], None, 'Hello!!!', 'success', None)
-        return jsonify({'ok': True, 'status': e.code, 'message': '请求已送达，接收方返回 HTTP %d' % e.code})
-    except urllib.error.URLError as e:
-        reason = str(e.reason) if e.reason else str(e)
-        app.logger.warning('Webhook 测试请求失败: url=%s, reason=%s', url, reason)
-        if 'timed out' in reason.lower() or 'timeout' in reason.lower():
-            return jsonify({'error': '连接超时。测试请求由 vConfig 所在服务器发出，请确保 Webhook URL 可从该服务器访问（勿填仅本机可用的地址如 localhost）。'}), 502
-        if 'certificate' in reason.lower() or 'ssl' in reason.lower():
-            return jsonify({'error': 'SSL 证书验证失败：%s' % reason}), 502
-        if 'connection refused' in reason.lower() or 'refused' in reason.lower():
-            return jsonify({'error': '连接被拒绝。测试请求由 vConfig 所在服务器发出，请确保 URL 可从服务器访问且服务已启动。'}), 502
-        return jsonify({'error': '无法连接：%s。提示：测试由服务器发起，Webhook URL 须在服务器侧可访问。' % reason}), 502
-    except Exception as e:
-        app.logger.warning('Webhook 测试请求异常: url=%s, err=%s', url, e)
-        return jsonify({'error': '请求失败：%s' % (str(e) or '未知错误')}), 502
-
-
-@app.route('/api/settings/test-email', methods=['POST'])
-def test_email():
-    """发送一封测试告警邮件，用于验证 SMTP 配置。"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
-    to_str = (_get_setting('alert_email_to', '') or '').strip()
-    to_list = [x.strip() for x in to_str.split(',') if x.strip()]
-    if not to_list:
-        return jsonify({'error': '请先配置收件人（告警邮箱地址）'}), 400
-    ok, err = _send_alert_email(to_list, '【vConfig】告警测试', '这是一封来自 vConfig 的告警测试邮件。若收到此邮件，说明邮箱配置正确。')
-    if not ok:
-        return jsonify({'error': err or '邮件发送失败'}), 502
-    _log_alert('test', 'email', ','.join(to_list), '【vConfig】告警测试', '测试邮件', 'success', None)
-    return jsonify({'ok': True, 'message': '测试邮件已发送至 %s' % ', '.join(to_list)})
-
-
-@app.route('/api/alert-logs', methods=['GET'])
-def list_alert_logs():
-    """告警发送日志列表，支持分页与搜索。"""
-    _ensure_tables()
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = max(1, min(100, int(request.args.get('per_page', 50))))
-    event = (request.args.get('event_type') or '').strip()
-    channel = (request.args.get('channel') or '').strip()
-    q = AlertLog.query
-    if event:
-        q = q.filter(AlertLog.event_type == event)
-    if channel:
-        q = q.filter(AlertLog.channel == channel)
-    q = q.order_by(AlertLog.id.desc())
-    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
-    return jsonify({
-        'items': [a.to_dict() for a in pagination.items],
-        'total': pagination.total,
-        'page': page,
-        'per_page': per_page,
-    })
-
-
-def _validate_pem_cert(data: bytes) -> bool:
-    """校验是否为有效 PEM 证书格式"""
-    try:
-        text = data.decode('utf-8', errors='ignore')
-        return '-----BEGIN CERTIFICATE-----' in text and '-----END CERTIFICATE-----' in text
-    except Exception:
-        return False
-
-
-def _validate_pem_key(data: bytes) -> bool:
-    """校验是否为有效 PEM 私钥格式"""
-    try:
-        text = data.decode('utf-8', errors='ignore')
-        if '-----BEGIN PRIVATE KEY-----' in text and '-----END PRIVATE KEY-----' in text:
-            return True
-        if '-----BEGIN RSA PRIVATE KEY-----' in text and '-----END RSA PRIVATE KEY-----' in text:
-            return True
-        if '-----BEGIN EC PRIVATE KEY-----' in text and '-----END EC PRIVATE KEY-----' in text:
-            return True
-        return False
-    except Exception:
-        return False
-
-
-@app.route('/api/settings/upload-ssl-cert', methods=['POST'])
-def upload_ssl_cert():
-    """用户上传自有域名证书（cert.pem + key.pem）"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改全局设置。'}), 403
-    cert_f = request.files.get('cert')
-    key_f = request.files.get('key')
-    if not cert_f or not cert_f.filename:
-        return jsonify({'error': '请选择证书文件（.crt 或 .pem）'}), 400
-    if not key_f or not key_f.filename:
-        return jsonify({'error': '请选择私钥文件（.key 或 .pem）'}), 400
-    try:
-        cert_data = cert_f.read()
-        key_data = key_f.read()
-    except Exception as e:
-        return jsonify({'error': '读取文件失败：%s' % str(e)}), 400
-    if len(cert_data) < 50 or len(key_data) < 50:
-        return jsonify({'error': '证书或私钥文件内容过短，请检查文件是否正确。'}), 400
-    if not _validate_pem_cert(cert_data):
-        return jsonify({'error': '证书格式无效，应为 PEM 格式（含 -----BEGIN CERTIFICATE-----）。'}), 400
-    if not _validate_pem_key(key_data):
-        return jsonify({'error': '私钥格式无效，应为 PEM 格式（含 -----BEGIN PRIVATE KEY----- 或 -----BEGIN RSA PRIVATE KEY-----）。'}), 400
-    cert_file = os.path.join(CERTS_DIR, 'cert.pem')
-    key_file = os.path.join(CERTS_DIR, 'key.pem')
-    os.makedirs(CERTS_DIR, mode=0o700, exist_ok=True)
-    try:
-        with open(cert_file, 'wb') as f:
-            f.write(cert_data)
-        with open(key_file, 'wb') as f:
-            f.write(key_data)
-        _write_audit('upload_ssl_cert', resource_type='settings', resource_id='', detail='SSL cert uploaded by user')
-        return jsonify({'ok': True, 'message': '证书已上传，请重启服务后生效。'})
-    except Exception as e:
-        return jsonify({'error': '保存证书失败：%s' % str(e)}), 500
-
-
-@app.route('/api/settings/update-ssl-cert', methods=['POST'])
-def update_ssl_cert():
-    """用户自助更新 HTTPS 自签名证书，删除旧证书并重新生成（有效期 100 年）"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权修改全局设置，请使用管理员账号登录。'}), 403
-    cert_file = os.path.join(CERTS_DIR, 'cert.pem')
-    key_file = os.path.join(CERTS_DIR, 'key.pem')
-    for f in (cert_file, key_file):
-        if os.path.isfile(f):
-            try:
-                os.unlink(f)
-            except OSError as e:
-                return jsonify({'error': '删除旧证书失败：%s' % str(e)}), 500
-    os.makedirs(CERTS_DIR, mode=0o700, exist_ok=True)
-    import subprocess
-    cmd = [
-        'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
-        '-keyout', key_file, '-out', cert_file,
-        '-days', '36500', '-nodes',
-        '-subj', '/CN=localhost/O=vConfig/C=CN',
-    ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
-        _write_audit('update_ssl_cert', resource_type='settings', resource_id='', detail='SSL cert regenerated')
-        return jsonify({'ok': True, 'message': 'SSL 证书已重新生成，请重启服务后生效。'})
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
-        return jsonify({'error': '生成证书失败（需安装 openssl）：%s' % str(e)}), 500
-
-
-@app.route('/api/settings/restart', methods=['POST'])
-def restart_service():
-    """重启服务：等同于执行 systemctl restart vconfig"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权重启服务，请使用管理员账号登录。'}), 403
-
-    def _do_restart():
-        try:
-            import subprocess
-            # 等同于在服务器上执行：systemctl restart vconfig
-            subprocess.Popen(['systemctl', 'restart', 'vconfig'])
-            app.logger.info('systemctl restart vconfig 已触发')
-        except Exception as e:
-            app.logger.warning('执行 systemctl restart vconfig 失败: %s', e)
-
-    threading.Thread(target=_do_restart, daemon=True).start()
-    _write_audit('restart_service', resource_type='settings', resource_id='', detail='user triggered restart via systemctl')
-    return jsonify({'ok': True, 'message': '已调用 systemctl restart vconfig，服务即将重启。'})
-
-
-def _get_sqlite_db_path():
-    """从 SQLALCHEMY_DATABASE_URI 解析 SQLite 数据库文件路径，非 SQLite 返回 None"""
-    try:
-        from sqlalchemy.engine.url import make_url
-    except ImportError:
-        return None
-    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-    if not uri or 'sqlite' not in uri.lower():
-        return None
-    try:
-        url = make_url(uri)
-        db_path = getattr(url, 'database', None)
-        if not db_path:
-            return None
-        if not os.path.isabs(db_path):
-            base = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.normpath(os.path.join(base, db_path))
-        return db_path
-    except Exception:
-        return None
-
-
-@app.route('/api/settings/db/backup')
-def db_backup():
-    """备份数据库：
-
-    - 若使用 SQLite：直接下载当前 SQLite 数据库文件；
-    - 若使用 MariaDB/MySQL：调用 mysqldump 导出 SQL 并提供下载。
-    """
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权备份数据库。'}), 403
-    db_path = _get_sqlite_db_path()
-    # 情况 1：SQLite，直接返回 .db 文件
-    if db_path and os.path.isfile(db_path):
-        dir_name = os.path.dirname(db_path)
-        file_name = os.path.basename(db_path)
-        fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.db'
-        # Flask >= 2.0 中 attachment_filename 已废弃，使用 download_name
-        return send_from_directory(
-            dir_name,
-            file_name,
-            as_attachment=True,
-            download_name=fn,
-        )
-
-    # 情况 2：MariaDB/MySQL，使用 mysqldump 导出
-    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-    if not uri:
-        return jsonify({'error': '未找到数据库连接配置，无法备份。'}), 400
-    try:
-        from sqlalchemy.engine.url import make_url
-        import subprocess
-    except ImportError:
-        return jsonify({'error': '服务器缺少必要组件，无法执行 MariaDB 备份。'}), 500
-
-    try:
-        url = make_url(uri)
-    except Exception as e:
-        return jsonify({'error': '解析数据库连接失败: %s' % e}), 500
-
-    driver = (url.drivername or '').split('+')[0]
-    if driver not in ('mysql', 'mariadb'):
-        return jsonify({'error': '当前数据库类型暂不支持在线备份，请使用数据库自带工具。'}), 400
-
-    db_name = url.database
-    if not db_name:
-        return jsonify({'error': '数据库名称缺失，无法备份。'}), 400
-
-    user = url.username or ''
-    host = url.host or 'localhost'
-    port = url.port or 3306
-    password = url.password or ''
-
-    if not user:
-        return jsonify({'error': '数据库用户名缺失，请在 DATABASE_URL 或 MARIADB_* 中配置用户名。'}), 400
-
-    env = os.environ.copy()
-    if password:
-        # 避免在命令行参数中暴露密码，使用环境变量传递
-        env['MYSQL_PWD'] = str(password)
-
-    cmd = [
-        'mysqldump',
-        '-h', str(host),
-        '-P', str(port),
-        '-u', str(user),
-        '--single-transaction',
-        '--quick',
-        '--skip-lock-tables',
-        str(db_name),
-    ]
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-            env=env,
-        )
-    except FileNotFoundError:
-        return jsonify({'error': '未检测到 mysqldump，请在服务器上安装 MariaDB/MySQL 客户端工具后重试。'}), 500
-    except Exception as e:
-        return jsonify({'error': '执行 mysqldump 失败: %s' % e}), 500
-
-    if proc.returncode != 0:
-        err = proc.stderr.decode('utf-8', errors='ignore')
-        return jsonify({'error': 'mysqldump 返回非零状态码: %s' % (err[:400] or proc.returncode)}), 500
-
-    sql_data = proc.stdout
-    if not sql_data:
-        return jsonify({'error': '备份结果为空，请检查数据库中是否有数据。'}), 500
-
-    fn = 'vconfig_' + datetime.utcnow().strftime('%Y%m%d') + '.sql'
-    resp = Response(sql_data, mimetype='application/sql')
-    resp.headers['Content-Disposition'] = 'attachment; filename=%s' % fn
-    return resp
-
-
-@app.route('/api/settings/db/restore', methods=['POST'])
-def db_restore():
-    """恢复数据库：上传 SQLite 备份文件并替换当前数据库，完成后触发重启"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前账号无权恢复数据库。'}), 403
-    db_path = _get_sqlite_db_path()
-    if not db_path:
-        return jsonify({'error': '当前使用 MariaDB/MySQL，请使用 mysql 导入等方式恢复。'}), 400
-    if 'file' not in request.files:
-        return jsonify({'error': '请选择要恢复的数据库备份文件。'}), 400
-    f = request.files['file']
-    if not f or f.filename == '':
-        return jsonify({'error': '未选择文件。'}), 400
-    try:
-        data = f.read()
-    except Exception as e:
-        return jsonify({'error': '读取文件失败: %s' % e}), 400
-    if len(data) < 16:
-        return jsonify({'error': '文件过小，非有效的 SQLite 数据库。'}), 400
-    if not data[:16].startswith(b'SQLite format 3\x00'):
-        return jsonify({'error': '文件格式不正确，请上传有效的 SQLite 备份文件。'}), 400
-    dir_name = os.path.dirname(db_path)
-    backup_fn = os.path.basename(db_path) + '.bak.' + datetime.utcnow().strftime('%Y%m%d%H%M%S')
-    backup_path = os.path.join(dir_name, backup_fn)
-    try:
-        import shutil
-        if os.path.isfile(db_path):
-            shutil.copy2(db_path, backup_path)
-        with open(db_path, 'wb') as out:
-            out.write(data)
-    except Exception as e:
-        if os.path.isfile(backup_path):
-            try:
-                os.unlink(backup_path)
-            except OSError:
-                pass
-        return jsonify({'error': '写入数据库失败: %s' % e}), 500
-    _write_audit('db_restore', resource_type='settings', resource_id='', detail='database restored, backup=%s' % backup_fn)
-
-    def _do_restart():
-        import time
-        time.sleep(1)
-        try:
-            import signal
-            os.kill(os.getppid(), signal.SIGHUP)
-        except Exception:
-            pass
-    threading.Thread(target=_do_restart, daemon=True).start()
-    return jsonify({'ok': True})
-
-
-@app.route('/api/settings/logo', methods=['POST'])
-def upload_logo():
-    """上传自定义 Logo（仅可由有权修改设置的用户调用）。"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权修改全局设置，请使用全局用户名登录。'}), 403
-    if 'file' not in request.files:
-        return jsonify({'error': '请选择要上传的文件。'}), 400
-    file = request.files['file']
-    if not file or file.filename == '':
-        return jsonify({'error': '未选择文件。'}), 400
-    filename = file.filename
-    ext = os.path.splitext(filename)[1].lower()
-    allowed_exts = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
-    if ext not in allowed_exts:
-        return jsonify({'error': '仅支持 PNG/JPG/GIF/WebP 格式的图片。'}), 400
-    os.makedirs(LOGO_DIR, exist_ok=True)
-    # 先清理旧文件
-    for name in os.listdir(LOGO_DIR):
-        if name.startswith('logo.') and os.path.isfile(os.path.join(LOGO_DIR, name)):
-            try:
-                os.unlink(os.path.join(LOGO_DIR, name))
-            except OSError:
-                pass
-    final_name = 'logo' + ext
-    save_path = os.path.join(LOGO_DIR, final_name)
-    try:
-        file.save(save_path)
-        with app.app_context():
-            _set_setting('logo_file', final_name)
-        _write_audit('upload_logo', resource_type='settings', resource_id='', detail=f'logo={final_name}')
-        return jsonify({'ok': True, 'logo_url': url_for('logo')})
-    except Exception as e:
-        return jsonify({'error': 'Logo 上传失败: %s' % e}), 500
-
-
-@app.route('/api/settings/logo', methods=['DELETE'])
-def delete_logo():
-    """删除自定义 Logo，恢复为默认图标。"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权修改全局设置，请使用全局用户名登录。'}), 403
-    filename = _get_setting('logo_file', '') or ''
-    if filename:
-        path = os.path.join(LOGO_DIR, os.path.basename(filename))
-        if os.path.isfile(path):
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
-    try:
-        _set_setting('logo_file', '')
-    except Exception:
-        pass
-    _write_audit('delete_logo', resource_type='settings', resource_id='', detail='logo reset to default')
-    return jsonify({'ok': True})
-
-
-# ---------- 配置文件浏览 ----------
-@app.route('/api/configs')
-def list_configs():
-    """列出已备份的配置文件目录结构"""
-    if not os.path.exists(CONFIGS_DIR):
-        return jsonify({'tree': []})
-    tree = []
-    for prefix in sorted(os.listdir(CONFIGS_DIR)):
-        p = os.path.join(CONFIGS_DIR, prefix)
-        if not os.path.isdir(p):
-            continue
-        hosts = []
-        for host in sorted(os.listdir(p)):
-            hp = os.path.join(p, host)
-            if not os.path.isdir(hp):
-                continue
-            files = sorted([f for f in os.listdir(hp) if f.endswith('.txt')], reverse=True)[:20]
-            hosts.append({'name': host, 'files': files})
-        tree.append({'prefix': prefix, 'hosts': hosts})
-    return jsonify({'tree': tree})
-
-
-def _config_prefix(hostname):
-    """与 backup_service 一致：根据 hostname 得到配置目录的 prefix"""
-    return hostname.split('.', 1)[0] if '.' in hostname else hostname
-
-
-_DIFF_IGNORE_PATTERNS = [
-    # 忽略「当前时间」等纯时间行，例如：Tue Feb 10 09:18:34.895 CST
-    re.compile(
-        r'^\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+'
-        r'[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?\s+[A-Z]+'
-    ),
-    # 忽略 Cisco 等设备的 ntp clock-period 行（频率估算值，每次可能不同）
-    re.compile(r'^\s*ntp\s+clock-period\s+\d+\s*$', re.IGNORECASE),
-]
-
-# 配置对比时用于「忽略时间戳」的正则：匹配行内日期时间（如 2026-03-06 12:54:39.239 +16:52），对比前会从行中移除
-_DIFF_TIMESTAMP_PATTERN = re.compile(
-    r'\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{1,2}:\d{2})?'
-)
-
-
-def _diff_canonical_line(line: str) -> str:
-    """将一行规范化为用于对比的键：去掉时间戳后 strip，便于忽略仅时间戳不同的变动。"""
-    if not line:
-        return line
-    t = _DIFF_TIMESTAMP_PATTERN.sub('', line).strip()
-    return t if t else line
-
-
-def _diff_config_lines(content_old, content_new):
-    """对比两份配置文本，按行集合差集得到新增行与删除行。返回 (added_list, removed_list)。
-
-    会先过滤掉一些「噪声行」，例如设备当前时间等每次备份都会变化、但不算真实配置变更的内容。
-    对比时忽略行内时间戳（如 2026-03-06 12:54:39.239 +16:52），仅时间戳不同的行视为同一行。
-    """
-
-    def _norm_lines(text: str):
-        lines = []
-        for raw in (text or '').splitlines():
-            ln = raw.strip()
-            if not ln:
-                continue
-            ignore = False
-            for pat in _DIFF_IGNORE_PATTERNS:
-                if pat.match(ln):
-                    ignore = True
-                    break
-            if ignore:
-                continue
-            lines.append(ln)
-        return lines
-
-    lines_old = _norm_lines(content_old)
-    lines_new = _norm_lines(content_new)
-    # 按「规范化行」（去掉时间戳）做差集，避免仅时间戳不同的行被算作新增/删除
-    old_canonical = {_diff_canonical_line(ln) for ln in lines_old}
-    new_canonical = {_diff_canonical_line(ln) for ln in lines_new}
-    added = sorted(ln for ln in lines_new if _diff_canonical_line(ln) not in old_canonical)
-    removed = sorted(ln for ln in lines_old if _diff_canonical_line(ln) not in new_canonical)
-    return (added, removed)
-
-
-def _resolve_config_dir(prefix, hostname):
-    """解析配置目录实际路径，支持大小写不敏感回退。
-    返回 (resolved_prefix, resolved_hostname, dir_path) 或 (None, None, None)。"""
-    dir_path = os.path.join(CONFIGS_DIR, prefix, hostname)
-    if os.path.isdir(dir_path):
-        return (prefix, hostname, dir_path)
-    if not os.path.isdir(CONFIGS_DIR):
-        return (None, None, None)
-    host_lower = (hostname or '').lower()
-    prefix_lower = (prefix or '').lower()
-    for p in os.listdir(CONFIGS_DIR):
-        pp = os.path.join(CONFIGS_DIR, p)
-        if not os.path.isdir(pp):
-            continue
-        if p.lower() != prefix_lower:
-            continue
-        for h in os.listdir(pp):
-            hp = os.path.join(pp, h)
-            if not os.path.isdir(hp):
-                continue
-            if h.lower() == host_lower:
-                return (p, h, hp)
-    return (None, None, None)
-
-
-@app.route('/api/configs/devices')
-def list_configs_by_devices():
-    """列出已备份配置：以设备表为准，遍历设备表，用 _resolve_config_dir 解析配置目录并统计 .txt 文件数。"""
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = max(1, min(request.args.get('per_page', 50, type=int), 200))
-    search = (request.args.get('search') or '').strip()
-    sort_by = (request.args.get('sort_by') or 'hostname').strip()
-    sort_dir = (request.args.get('sort_dir') or 'asc').strip().lower()
-    devices = []
-    for dev in Device.query.order_by(Device.hostname).all():
-        prefix = _config_prefix(dev.hostname)
-        rprefix, rhost, dir_path = _resolve_config_dir(prefix, dev.hostname)
-        files = []
-        path_host = dev.hostname
-        if dir_path and rhost:
-            path_host = rhost
-            try:
-                files = sorted([f for f in os.listdir(dir_path) if f.endswith('.txt')], reverse=True)
-            except OSError:
-                pass
-        devices.append({
-            'hostname': path_host,
-            'display_hostname': dev.hostname,
-            'ip': dev.ip or '',
-            'device_type': dev.device_type or '',
-            'prefix': rprefix if rprefix else prefix,
-            'files': files,
-            'file_count': len(files),
-        })
-    # 过滤
-    if search:
-        ql = search.lower()
-        devices = [
-            d for d in devices
-            if ql in (d.get('display_hostname') or d.get('hostname') or '').lower()
-            or ql in (d.get('ip') or '').lower()
-            or ql in (d.get('device_type') or '').lower()
-        ]
-    # 排序
-    order_cols = {'hostname': 'display_hostname', 'ip': 'ip', 'device_type': 'device_type'}
-    key_field = order_cols.get(sort_by, 'display_hostname')
-    reverse = sort_dir == 'desc'
-    devices.sort(key=lambda d: ((d.get(key_field) or d.get('hostname')) or '').lower(), reverse=reverse)
-    total = len(devices)
-    start = (page - 1) * per_page
-    end = start + per_page
-    devices = devices[start:end]
-    return jsonify({
-        'devices': devices,
-        'total': total,
-        'page': page,
-        'per_page': per_page,
-        'sort_by': sort_by,
-        'sort_dir': sort_dir,
-        'can_delete_backups': _is_admin(),
-    })
-
-
-@app.route('/api/configs/devices/<prefix>/<hostname>')
-def list_config_files_for_device(prefix, hostname):
-    """返回某设备（prefix/hostname）的配置文件列表，用于「查看历史备份」"""
-    if '..' in prefix or '..' in hostname or '/' in prefix or '/' in hostname:
-        return jsonify({'error': 'invalid'}), 400
-    _, _, dir_path = _resolve_config_dir(prefix, hostname)
-    if not dir_path:
-        return jsonify({'hostname': hostname, 'prefix': prefix, 'files': []})
-    entries = []
-    for f in sorted(os.listdir(dir_path), reverse=True):
-        if not f.endswith('.txt'):
-            continue
-        fp = os.path.join(dir_path, f)
-        if not os.path.isfile(fp):
-            continue
-        try:
-            size = os.path.getsize(fp)
-        except OSError:
-            size = None
-        entries.append({'name': f, 'size': size})
-    return jsonify({'hostname': hostname, 'prefix': prefix, 'files': entries})
-
-
-@app.route('/api/configs/devices/<prefix>/<hostname>/diff-latest')
-def device_config_diff_latest(prefix, hostname):
-    """返回该设备「最新备份」与「上一份备份」的按行差异：新增行、删除行。用于首页配置变动弹窗。"""
-    if '..' in prefix or '..' in hostname or '/' in prefix or '/' in hostname:
-        return jsonify({'error': 'invalid'}), 400
-    _, _, dir_path = _resolve_config_dir(prefix, hostname)
-    if not dir_path:
-        return jsonify({'added': [], 'removed': [], 'hostname': hostname})
-    files = sorted([f for f in os.listdir(dir_path) if f.endswith('.txt')], reverse=True)
-    if len(files) < 2:
-        return jsonify({'added': [], 'removed': [], 'hostname': hostname})
-    path_new = os.path.join(dir_path, files[0])
-    path_old = os.path.join(dir_path, files[1])
-    try:
-        with open(path_new, 'r', encoding='utf-8', errors='replace') as f:
-            content_new = f.read()
-        with open(path_old, 'r', encoding='utf-8', errors='replace') as f:
-            content_old = f.read()
-    except OSError as e:
-        app.logger.warning('读取配置 diff 失败: %s', e)
-        return jsonify({'error': 'read failed', 'added': [], 'removed': []}), 500
-    added, removed = _diff_config_lines(content_old, content_new)
-    return jsonify({'hostname': hostname, 'added': added, 'removed': removed})
-
-
-def _save_config_changes_to_db():
-    """在备份任务完成后调用：计算配置变动并与上次差异，结果写入数据库。"""
-    devices = _dashboard_config_change_devices(limit=30)
-    try:
-        with app.app_context():
-            _ensure_tables()
-            ConfigChangeRecord.query.delete()
-            now = datetime.utcnow()
-            for d in devices:
-                r = ConfigChangeRecord(
-                    hostname=d.get('hostname') or '',
-                    prefix=d.get('prefix') or '',
-                    ip=d.get('ip') or '',
-                    device_type=d.get('device_type') or '',
-                    added_count=d.get('added_count', 0),
-                    removed_count=d.get('removed_count', 0),
-                    change_count=d.get('change_count', 0),
-                    computed_at=now,
-                )
-                db.session.add(r)
-            db.session.commit()
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        raise
-
-
-def _dashboard_config_change_devices(limit=15):
-    """按「最新 vs 上一份」配置变动行数（新增+删除）排序，返回变动最多的设备列表。"""
-    result = []
-    for dev in Device.query.order_by(Device.hostname).all():
-        prefix = _config_prefix(dev.hostname)
-        _, rhost, dir_path = _resolve_config_dir(prefix, dev.hostname)
-        if not dir_path or not rhost:
-            continue
-        files = sorted([f for f in os.listdir(dir_path) if f.endswith('.txt')], reverse=True)
-        if len(files) < 2:
-            continue
-        path_new = os.path.join(dir_path, files[0])
-        path_old = os.path.join(dir_path, files[1])
-        try:
-            with open(path_new, 'r', encoding='utf-8', errors='replace') as f:
-                content_new = f.read()
-            with open(path_old, 'r', encoding='utf-8', errors='replace') as f:
-                content_old = f.read()
-        except OSError:
-            continue
-        added, removed = _diff_config_lines(content_old, content_new)
-        change_count = len(added) + len(removed)
-        if change_count == 0:
-            continue
-        result.append({
-            'hostname': rhost,
-            'prefix': prefix,
-            'ip': (dev.ip or '').strip(),
-            'device_type': (dev.device_type or '').strip(),
-            'change_count': change_count,
-            'added_count': len(added),
-            'removed_count': len(removed),
-        })
-    result.sort(key=lambda x: x['change_count'], reverse=True)
-    return result[:limit]
-
-
-@app.route('/api/dashboard/config-changes')
-def dashboard_config_changes():
-    """首页「配置变动」卡片数据：从数据库读取，由每次备份任务完成后计算并写入。"""
-    _ensure_tables()
-    limit = max(1, min(30, request.args.get('limit', 15, type=int)))
-    rows = (
-        ConfigChangeRecord.query
-        .order_by(ConfigChangeRecord.change_count.desc())
-        .limit(limit)
-        .all()
-    )
-    devices = [r.to_dict() for r in rows]
-    return jsonify({'devices': devices})
-
-
-@app.route('/config-changes')
-def config_changes_page():
-    """重定向到主应用 #config-changes 视图"""
-    return redirect(url_for('index') + '#config-changes')
-
-
-@app.route('/api/configs/devices/<prefix>/<hostname>/delete', methods=['POST'])
-def delete_config_files_for_device(prefix, hostname):
-    """删除某设备的所有备份配置文件（需前端再次确认）"""
-    if not _can_edit_settings():
-        return jsonify({'error': '当前登录账号无权删除备份文件，请使用全局用户名登录。'}), 403
-    if '..' in prefix or '..' in hostname or '/' in prefix or '/' in hostname:
-        return jsonify({'error': 'invalid'}), 400
-    _, _, dir_path = _resolve_config_dir(prefix, hostname)
-    if not dir_path:
-        return jsonify({'ok': True, 'deleted': 0})
-    deleted = 0
-    if os.path.isdir(dir_path):
-        for f in os.listdir(dir_path):
-            if not f.endswith('.txt'):
-                continue
-            fp = os.path.join(dir_path, f)
-            if os.path.isfile(fp):
-                try:
-                    os.unlink(fp)
-                    deleted += 1
-                except OSError:
-                    pass
-    _write_audit('delete_backups', resource_type='config', resource_id=f'{prefix}/{hostname}', detail=f'deleted={deleted}')
-    return jsonify({'ok': True, 'deleted': deleted})
-
-@app.route('/api/configs/<path:filepath>')
-def get_config_file(filepath):
-    """下载/查看配置文件；?download=1 时以附件形式下载为 .txt"""
-    if '..' in filepath or filepath.startswith('/'):
-        return jsonify({'error': 'invalid path'}), 400
-    parts = filepath.split('/')
-    if len(parts) < 3:
-        full_path = os.path.normpath(os.path.join(CONFIGS_DIR, filepath))
-    else:
-        prefix, hostname, fname = parts[0], parts[1], '/'.join(parts[2:])
-        _, _, dir_path = _resolve_config_dir(prefix, hostname)
-        full_path = os.path.join(dir_path, fname) if dir_path else os.path.normpath(os.path.join(CONFIGS_DIR, filepath))
-    abs_configs = os.path.abspath(CONFIGS_DIR)
-    abs_full = os.path.abspath(full_path)
-    if not (abs_full == abs_configs or abs_full.startswith(abs_configs + os.sep)):
-        return jsonify({'error': 'invalid path'}), 400
-    if not os.path.isfile(full_path):
-        return jsonify({'error': 'file not found'}), 404
-    rel_path = os.path.relpath(abs_full, abs_configs)
-    as_attachment = request.args.get('download') == '1'
-    if as_attachment:
-        with open(full_path, 'rb') as f:
-            body = f.read()
-        name = os.path.basename(full_path)
-        if not name.lower().endswith('.txt'):
-            name = name + '.txt'
-        return Response(
-            body,
-            mimetype='text/plain; charset=utf-8',
-            headers={
-                'Content-Disposition': f'attachment; filename="{name}"',
-            },
-        )
-    return send_from_directory(CONFIGS_DIR, rel_path)
-
-
-# ---------- 配置全文搜索（基础版） ----------
-@app.route('/api/search/configs')
-def search_configs():
-    """在所有已备份配置中按关键字全文搜索（基础版，大小写不敏感，返回前 N 条匹配）"""
-    q = (request.args.get('q') or '').strip()
-    limit = request.args.get('limit', 50, type=int)
-    limit = max(1, min(limit, 200))
-    if not q:
-        return jsonify({'error': '请输入搜索关键字 q'}), 400
-    if not os.path.exists(CONFIGS_DIR):
-        return jsonify({'items': []})
-    q_lower = q.lower()
-
-    # 一次性构建 hostname -> ip 映射，便于结果中带出 IP
-    host_ip = {
-        h: ip for h, ip in
-        Device.query.with_entities(Device.hostname, Device.ip).all()
-    }
-
-    items = []
-    for prefix in sorted(os.listdir(CONFIGS_DIR)):
-        pdir = os.path.join(CONFIGS_DIR, prefix)
-        if not os.path.isdir(pdir):
-            continue
-        for host in sorted(os.listdir(pdir)):
-            hdir = os.path.join(pdir, host)
-            if not os.path.isdir(hdir):
-                continue
-            for fname in sorted(os.listdir(hdir)):
-                if not fname.endswith('.txt'):
-                    continue
-                fpath = os.path.join(hdir, fname)
-                try:
-                    with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                        for idx, line in enumerate(f, start=1):
-                            if q_lower in line.lower():
-                                snippet = line.strip()
-                                if len(snippet) > 200:
-                                    snippet = snippet[:197] + '...'
-                                items.append({
-                                    'prefix': prefix,
-                                    'hostname': host,
-                                    'ip': host_ip.get(host, ''),
-                                    'filename': fname,
-                                    'line_no': idx,
-                                    'line': snippet,
-                                })
-                                if len(items) >= limit:
-                                    return jsonify({'items': items})
-                except OSError:
-                    continue
-    return jsonify({'items': items})
-
-
-# ---------- 配置合规检查（基础规则） ----------
-@app.route('/api/compliance/<prefix>/<hostname>', methods=['GET'])
-def check_compliance(prefix, hostname):
-    """对某设备最新配置执行基础合规检查"""
-    if '..' in prefix or '..' in hostname or '/' in prefix or '/' in hostname:
-        return jsonify({'error': 'invalid'}), 400
-    dir_path = os.path.join(CONFIGS_DIR, prefix, hostname)
-    if not os.path.isdir(dir_path):
-        return jsonify({'error': 'not_found', 'message': '未找到该设备的配置目录'}), 404
-    # 找到最新的一个 .txt 配置文件（按文件名逆序或按 mtime 最大）
-    candidates = [f for f in os.listdir(dir_path) if f.endswith('.txt')]
-    if not candidates:
-        return jsonify({'error': 'no_config', 'message': '该设备暂无备份配置文件'}), 404
-    # 文件名一般包含时间戳，直接按名称倒序即可
-    candidates.sort(reverse=True)
-    latest = candidates[0]
-    full_path = os.path.join(dir_path, latest)
-    try:
-        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-    except OSError:
-        return jsonify({'error': 'read_failed', 'message': '读取配置文件失败'}), 500
-
-    # 获取设备类型信息（如有）
-    dev = Device.query.filter_by(hostname=hostname).first()
-    dev_type = dev.device_type if dev else ''
-    result = check_config(content, hostname=hostname, device_type=dev_type)
-    result['latest_file'] = latest
-    return jsonify(result)
+app.register_blueprint(create_settings_assets_blueprint({
+    'logo_dir': LOGO_DIR,
+    'logo_max_size': LOGO_MAX_SIZE,
+    'can_edit_settings': _can_edit_settings,
+    'ensure_tables': _ensure_tables,
+    'get_setting': _get_setting,
+    'set_setting': _set_setting,
+    'write_audit': _write_audit,
+}))
+
+app.register_blueprint(create_settings_ops_blueprint({
+    'can_edit_settings': _can_edit_settings,
+    'get_setting': _get_setting,
+    'ensure_tables': _ensure_tables,
+    'write_audit': _write_audit,
+    'webhook_body_for_url': _webhook_body_for_url,
+    'send_alert_email': _send_alert_email,
+    'log_alert': _log_alert,
+    'certs_dir': CERTS_DIR,
+}))
+
+app.register_blueprint(create_settings_core_blueprint({
+    'current_role': _current_role,
+    'can_edit_settings': _can_edit_settings,
+    'get_setting': _get_setting,
+    'set_setting': _set_setting,
+    'setting_has_secret_value': _setting_has_secret_value,
+    'get_default_settings': _get_default_settings,
+    'reload_backup_schedule': _reload_backup_schedule,
+    'write_audit': _write_audit,
+    'logo_dir': LOGO_DIR,
+}))
+
+config_files_service = ConfigFilesService({
+    'configs_dir': CONFIGS_DIR,
+    'can_edit_settings': _can_edit_settings,
+    'is_admin': _is_admin,
+    'write_audit': _write_audit,
+    'ensure_tables': _ensure_tables,
+    'app_context': app.app_context,
+    'logger': app.logger,
+})
+app.register_blueprint(create_config_files_blueprint(config_files_service))
+
+app.register_blueprint(create_users_blueprint({
+    'can_edit_settings': _can_edit_settings,
+    'check_password_policy': _check_password_policy,
+    'super_admin_username': SUPER_ADMIN_USERNAME,
+}))
+
+app.register_blueprint(create_device_types_blueprint({
+    'can_edit_settings': _can_edit_settings,
+    'ensure_tables': _ensure_tables,
+    'get_builtin_type_config': _get_builtin_type_config,
+}))
+
+app.register_blueprint(create_device_groups_blueprint({
+    'can_edit_settings': _can_edit_settings,
+    'ensure_device_group_column': _ensure_device_group_column,
+    'get_setting': _get_setting,
+    'set_setting': _set_setting,
+}))
+
+app.register_blueprint(create_device_inventory_blueprint({
+    'can_edit_settings': _can_edit_settings,
+    'current_user_allowed_groups': _current_user_allowed_groups,
+    'get_setting': _get_setting,
+    'normalize_device_type': _normalize_device_type,
+    'write_audit': _write_audit,
+}))
+
+app.register_blueprint(create_backup_logs_blueprint({
+    'get_setting': _get_setting,
+    'get_zoneinfo': _get_zoneinfo,
+}))
+
+app.register_blueprint(create_reports_blueprint({
+    'ensure_tables': _ensure_tables,
+    'ensure_device_group_column': _ensure_device_group_column,
+    'current_user_allowed_groups': _current_user_allowed_groups,
+    'write_audit': _write_audit,
+}))
+
+app.register_blueprint(create_pages_blueprint({
+    'ensure_tables': _ensure_tables,
+    'ensure_connection_type_column': _ensure_connection_type_column,
+    'ensure_device_group_column': _ensure_device_group_column,
+    'ensure_device_maintenance_columns': _ensure_device_maintenance_columns,
+    'ensure_device_ssh_port_column': _ensure_device_ssh_port_column,
+    'ensure_device_telnet_port_column': _ensure_device_telnet_port_column,
+    'ensure_user_allowed_groups_column': _ensure_user_allowed_groups_column,
+    'get_setting': _get_setting,
+}))
+
+app.register_blueprint(create_auth_blueprint({
+    'ensure_tables': _ensure_tables,
+    'ensure_user_password_column': _ensure_user_password_column,
+    'ensure_super_admin': _ensure_super_admin,
+    'ensure_user_record': _ensure_user_record,
+    'get_setting': _get_setting,
+    'check_login_locked': _check_login_locked,
+    'login_fail_record': _login_fail_record,
+    'login_fail_clear': _login_fail_clear,
+    'write_audit': _write_audit,
+}))
 
 
 # ---------- 初始化 ----------

@@ -6,7 +6,7 @@ import time
 import socket
 import telnetlib
 import datetime
-import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Callable, List, Tuple
 
 # SSH 端口，由调用方传入
@@ -454,6 +454,7 @@ def run_backup_task(
     app_context=None,
     type_configs: Optional[dict] = None,
     fallback_to_second: bool = False,
+    max_workers: int = 1,
 ) -> None:
     """
     devices: [(ip, hostname, dev_type), ...] 或含 (username, password, connection_type, ssh_port, telnet_port)
@@ -640,8 +641,22 @@ def run_backup_task(
         if fallback_to_second and last_result['status'] is not None:
             log_callback(ip, hostname, dev_type, last_result['status'], last_result.get('message'), last_result.get('duration'), last_result.get('config_path'))
 
-    for item in devices:
-        do_one(item)
+    try:
+        workers = int(max_workers or 1)
+    except (TypeError, ValueError):
+        workers = 1
+    workers = max(1, min(workers, len(devices) or 1))
+    if workers == 1:
+        for item in devices:
+            do_one(item)
+        return
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(do_one, item) for item in devices]
+        for future in as_completed(futures):
+            # Surface unexpected worker exceptions to the caller. Expected device failures
+            # are already converted into log_callback records inside do_one.
+            future.result()
 
 
 def run_single_backup(
@@ -761,30 +776,21 @@ def run_backup_async(
     type_configs: Optional[dict] = None,
     fallback_to_second: bool = False,
 ) -> None:
-    """多线程异步执行备份"""
-    import math
-    n = len(devices)
-    step = max(1, int(math.ceil(float(n) / thread_num)))
-    threads = []
-    for i in range(thread_num):
-        chunk = devices[int(i * step):int((i + 1) * step)]
-        if not chunk:
-            continue
-        t = threading.Thread(
-            target=run_backup_task,
-            args=(chunk, configs_dir, default_username, default_password, exclude_pattern, log_callback),
-            kwargs={
-                "default_connection_type": default_connection_type,
-                "ssh_port": ssh_port,
-                "telnet_port": telnet_port,
-                "timeout_seconds": timeout_seconds,
-                "read_timeout_seconds": read_timeout_seconds,
-                "app_context": app_context,
-                "type_configs": type_configs,
-                "fallback_to_second": fallback_to_second,
-            },
-        )
-        threads.append(t)
-        t.start()
-    for t in threads:
-        t.join()
+    """按指定并发数执行备份。保留该入口以兼容旧调用方。"""
+    run_backup_task(
+        devices,
+        configs_dir,
+        default_username,
+        default_password,
+        exclude_pattern,
+        log_callback,
+        default_connection_type=default_connection_type,
+        ssh_port=ssh_port,
+        telnet_port=telnet_port,
+        timeout_seconds=timeout_seconds,
+        read_timeout_seconds=read_timeout_seconds,
+        app_context=app_context,
+        type_configs=type_configs,
+        fallback_to_second=fallback_to_second,
+        max_workers=thread_num,
+    )
