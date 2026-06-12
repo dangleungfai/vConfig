@@ -374,8 +374,12 @@ function toast(message, type) {
 
 // 配置资源索引
 let resourcePage = 1;
-let resourcePerPage = 50;
+let resourcePerPage = 100;
 let resourceCurrentGateway = '';
+let resourceSummaryItems = [];
+let resourceSummaryPage = 1;
+let resourceSummaryPerPage = 100;
+let resourceSummaryKeyword = '';
 
 function resourceParams(includePaging) {
     const params = new URLSearchParams();
@@ -440,14 +444,43 @@ async function loadResourceSummary() {
         const run = data.latest_run || null;
         setResourceStat('resource-stat-files', run ? (run.scanned_files ?? 0) : 0);
         setResourceStat('resource-stat-run', run && run.finished_at ? formatInTimezone(run.finished_at, footerTimezone) : (run ? run.status : '--'));
-        const items = Array.isArray(data.items) ? data.items : [];
-        if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="4">暂无索引数据，请点击“重建索引”。</td></tr>';
-            return;
-        }
-        tbody.innerHTML = items.map(item => {
-            const gateway = item.gateway || '';
-            return `
+        resourceSummaryItems = Array.isArray(data.items) ? data.items : [];
+        renderResourceSummaryTable();
+    } catch (e) {
+        console.warn('loadResourceSummary failed', e);
+        tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(e.message || '加载失败')}</td></tr>`;
+    }
+}
+
+function filteredResourceSummaryItems() {
+    const keyword = resourceSummaryKeyword.trim().toLowerCase();
+    if (!keyword) return resourceSummaryItems;
+    return resourceSummaryItems.filter(item => {
+        return [
+            item.gateway,
+            item.device_profile,
+            item.device_model,
+            item.count,
+        ].some(value => String(value ?? '').toLowerCase().includes(keyword));
+    });
+}
+
+function renderResourceSummaryTable() {
+    const tbody = document.getElementById('resource-summary-list');
+    if (!tbody) return;
+    const items = filteredResourceSummaryItems();
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="4">暂无匹配 PE。</td></tr>';
+        renderResourceSummaryPagination(0);
+        return;
+    }
+    const totalPages = Math.max(1, Math.ceil(items.length / resourceSummaryPerPage));
+    resourceSummaryPage = Math.min(Math.max(1, resourceSummaryPage), totalPages);
+    const start = (resourceSummaryPage - 1) * resourceSummaryPerPage;
+    const pageItems = items.slice(start, start + resourceSummaryPerPage);
+    tbody.innerHTML = pageItems.map(item => {
+        const gateway = item.gateway || '';
+        return `
             <tr class="resource-summary-row" data-gateway="${escapeHtml(gateway)}">
                 <td><button type="button" class="link-button resource-gateway-link" data-gateway="${escapeHtml(gateway)}">${escapeHtml(gateway)}</button></td>
                 <td>${escapeHtml(item.device_profile || '')}</td>
@@ -455,11 +488,23 @@ async function loadResourceSummary() {
                 <td>${escapeHtml(item.count ?? 0)}</td>
             </tr>
         `;
-        }).join('');
-    } catch (e) {
-        console.warn('loadResourceSummary failed', e);
-        tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(e.message || '加载失败')}</td></tr>`;
-    }
+    }).join('');
+    renderResourceSummaryPagination(items.length);
+}
+
+function renderResourceSummaryPagination(total) {
+    const el = document.getElementById('resource-summary-pagination');
+    if (!el) return;
+    const totalPages = Math.max(1, Math.ceil((total || 0) / resourceSummaryPerPage));
+    resourceSummaryPage = Math.min(Math.max(1, resourceSummaryPage), totalPages);
+    const totalText = window.t ? window.t('pagination_total').replace('{n}', total || 0) : `共 ${total || 0} 条`;
+    const prevText = window.t ? window.t('pagination_prev') : '上一页';
+    const nextText = window.t ? window.t('pagination_next') : '下一页';
+    el.innerHTML = `
+        <button type="button" class="btn btn-secondary btn-sm" data-resource-summary-page="${resourceSummaryPage - 1}" ${resourceSummaryPage <= 1 ? 'disabled' : ''}>${prevText}</button>
+        <span>${escapeHtml(totalText)}，${resourceSummaryPage}/${totalPages}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-resource-summary-page="${resourceSummaryPage + 1}" ${resourceSummaryPage >= totalPages ? 'disabled' : ''}>${nextText}</button>
+    `;
 }
 
 function showResourceSummaryView(updateHash) {
@@ -545,6 +590,30 @@ function renderResourcePagination(total, page, perPage) {
 }
 
 function initResourceIndexHandlers() {
+    document.getElementById('btn-resource-summary-search')?.addEventListener('click', () => {
+        const input = document.getElementById('resource-summary-search');
+        resourceSummaryKeyword = input ? input.value : '';
+        resourceSummaryPage = 1;
+        renderResourceSummaryTable();
+    });
+    document.getElementById('resource-summary-search')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            resourceSummaryKeyword = e.target.value || '';
+            resourceSummaryPage = 1;
+            renderResourceSummaryTable();
+        }
+    });
+    document.getElementById('resource-summary-per-page')?.addEventListener('change', e => {
+        resourceSummaryPerPage = parseInt(e.target.value, 10) || 100;
+        resourceSummaryPage = 1;
+        renderResourceSummaryTable();
+    });
+    document.getElementById('resource-summary-pagination')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-resource-summary-page]');
+        if (!btn || btn.disabled) return;
+        resourceSummaryPage = parseInt(btn.dataset.resourceSummaryPage, 10) || 1;
+        renderResourceSummaryTable();
+    });
     document.getElementById('resource-summary-list')?.addEventListener('click', e => {
         const btn = e.target.closest('[data-gateway]');
         if (!btn) return;

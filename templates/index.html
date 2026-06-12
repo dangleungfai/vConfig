@@ -179,6 +179,10 @@
                 <p class="form-hint" data-i18n="resource_summary_hint">点击 PE 名称查看该设备的接口资源明细。</p>
             </div>
         </div>
+        <div class="filters-bar resource-summary-toolbar">
+            <input type="text" id="resource-summary-search" data-i18n-placeholder="resource_summary_search" placeholder="搜索 PE 名称 / 设备类型">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-resource-summary-search" data-i18n="btn_search">搜索</button>
+        </div>
         <div class="table-wrap">
             <table class="table resource-summary-table">
                 <thead>
@@ -191,6 +195,18 @@
                 </thead>
                 <tbody id="resource-summary-list"></tbody>
             </table>
+        </div>
+        <div class="devices-footer">
+            <div class="pagination" id="resource-summary-pagination"></div>
+            <div class="per-page">
+                <span data-i18n="per_page">每页</span>
+                <select id="resource-summary-per-page">
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+                <span data-i18n="resource_rows">条</span>
+            </div>
         </div>
     </section>
 
@@ -235,8 +251,8 @@
                 <span data-i18n="per_page">每页</span>
                 <select id="resource-per-page">
                     <option value="20">20</option>
-                    <option value="50" selected>50</option>
-                    <option value="100">100</option>
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
                     <option value="200">200</option>
                 </select>
                 <span data-i18n="resource_rows">条</span>
