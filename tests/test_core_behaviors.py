@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import tempfile
 import threading
 import time
@@ -8,6 +9,8 @@ from unittest.mock import patch
 import backup_service
 import config
 from models import normalize_user_role
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class CoreBehaviorTests(unittest.TestCase):
@@ -59,6 +62,15 @@ class CoreBehaviorTests(unittest.TestCase):
         self.assertEqual(rules.get('/api/devices/sites'), ['device_inventory.list_sites'])
         self.assertEqual(rules.get('/api/devices/import'), ['device_inventory.import_devices'])
         self.assertEqual(rules.get('/api/devices/discover'), ['device_inventory.discover_devices'])
+
+    def test_templates_and_blueprints_do_not_reference_old_endpoint_names(self):
+        checked_files = list((PROJECT_ROOT / 'templates').glob('*.html'))
+        checked_files.extend((PROJECT_ROOT / 'blueprints').glob('*.py'))
+        forbidden = ("url_for('logout_view'", 'url_for("logout_view"', "url_for('index'", 'url_for("index"')
+        for path in checked_files:
+            text = path.read_text(encoding='utf-8')
+            for pattern in forbidden:
+                self.assertNotIn(pattern, text, f'{pattern} remains in {path}')
 
     def test_user_role_normalization_keeps_current_roles_and_maps_legacy_values(self):
         self.assertEqual(normalize_user_role('admin'), 'admin')

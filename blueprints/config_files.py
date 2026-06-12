@@ -278,7 +278,7 @@ def create_config_files_blueprint(service: ConfigFilesService):
 
     @bp.route('/config-changes')
     def config_changes_page():
-        return redirect(url_for('index') + '#config-changes')
+        return redirect(url_for('pages.index') + '#config-changes')
 
     @bp.route('/api/configs/devices/<prefix>/<hostname>/delete', methods=['POST'])
     def delete_config_files_for_device(prefix, hostname):

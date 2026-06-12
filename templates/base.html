@@ -55,7 +55,7 @@
             {% if current_user %}
             <span class="header-user">{{ current_user }}</span>
             {% endif %}
-            <a href="{{ url_for('logout_view') }}" class="tab header-logout" data-i18n="btn_logout">退出</a>
+            <a href="{{ url_for('auth.logout_view') }}" class="tab header-logout" data-i18n="btn_logout">退出</a>
             </div>
         </div>
     </header>
