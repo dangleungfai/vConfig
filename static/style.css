@@ -340,6 +340,23 @@ a:hover { color: var(--primary-hover); }
 .stats-cards .stat-card:nth-child(6) { border-left-color: #7c3aed; } /* 24h 达标率 - 紫 */
 .stat-value { font-size: 2rem; font-weight: 600; letter-spacing: -0.03em; }
 .stat-label { font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.4rem; }
+#panel-resources .stats-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 860px;
+}
+#panel-resources .stat-card {
+    min-height: 116px;
+    padding: 1.25rem 1.5rem;
+}
+#panel-resources .stat-value {
+    font-size: 1.9rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+#panel-resources #resource-stat-run {
+    font-size: 1.35rem;
+    line-height: 1.3;
+}
 .dashboard-meta { margin-bottom: 0.5rem; }
 .dashboard-running { margin-bottom: 0.5rem; }
 .dashboard-hint { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; }
@@ -1120,6 +1137,119 @@ a:hover { color: var(--primary-hover); }
 .table tbody tr:hover { background: var(--bg-elevated); }
 .table .status-ok { color: var(--success); }
 .table .status-fail { color: var(--error); }
+
+.resource-section {
+    margin-top: 1.5rem;
+}
+.resource-section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.resource-section-header .dashboard-card-title {
+    margin-bottom: 0.35rem;
+}
+.resource-detail-header .btn {
+    margin-bottom: 0.9rem;
+}
+.resource-summary-table th,
+.resource-summary-table td {
+    white-space: nowrap;
+}
+.resource-summary-table td:first-child {
+    font-weight: 600;
+}
+.resource-summary-row {
+    cursor: pointer;
+}
+.resource-gateway-link {
+    appearance: none;
+    border: 0;
+    background: none;
+    color: var(--primary);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    padding: 0;
+    text-align: left;
+}
+.resource-gateway-link:hover {
+    text-decoration: underline;
+}
+.resource-filters {
+    margin-bottom: 0.75rem;
+    align-items: stretch;
+}
+.resource-filters input[type="text"] {
+    width: auto;
+    min-width: 150px;
+    flex: 1 1 170px;
+}
+.resource-filters .btn {
+    min-width: 72px;
+}
+.resource-detail-table-wrap {
+    max-width: 100%;
+}
+.resource-detail-table {
+    min-width: 1280px;
+    table-layout: fixed;
+}
+.resource-detail-table th,
+.resource-detail-table td {
+    vertical-align: top;
+    line-height: 1.45;
+}
+.resource-detail-table th:nth-child(1),
+.resource-detail-table td:nth-child(1) { width: 150px; }
+.resource-detail-table th:nth-child(2),
+.resource-detail-table td:nth-child(2) { width: 260px; }
+.resource-detail-table th:nth-child(3),
+.resource-detail-table td:nth-child(3) { width: 120px; }
+.resource-detail-table th:nth-child(4),
+.resource-detail-table td:nth-child(4),
+.resource-detail-table th:nth-child(5),
+.resource-detail-table td:nth-child(5) { width: 130px; }
+.resource-detail-table th:nth-child(6),
+.resource-detail-table td:nth-child(6) { width: 72px; }
+.resource-detail-table th:nth-child(7),
+.resource-detail-table td:nth-child(7) { width: 120px; }
+.resource-detail-table th:nth-child(8),
+.resource-detail-table td:nth-child(8) { width: 160px; }
+.resource-detail-table th:nth-child(9),
+.resource-detail-table td:nth-child(9) { width: 240px; }
+.resource-detail-table th:nth-child(10),
+.resource-detail-table td:nth-child(10) { width: 190px; }
+.resource-detail-table td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (max-width: 900px) {
+    #panel-resources .stats-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: none;
+    }
+    .resource-section-header {
+        flex-direction: column;
+    }
+    .resource-filters input[type="text"],
+    .resource-filters .btn {
+        flex-basis: 100%;
+        width: 100%;
+    }
+}
+
+@media (max-width: 560px) {
+    #panel-resources .stats-cards {
+        grid-template-columns: 1fr;
+    }
+    #panel-resources .stat-card {
+        min-height: auto;
+    }
+}
 
 /* 设备类型管理表：字号与内边距与整体协调，操作列加宽并禁止换行 */
 #device-type-table th,

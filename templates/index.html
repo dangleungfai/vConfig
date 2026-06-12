@@ -172,50 +172,15 @@
             <div class="stat-label" data-i18n="resource_latest_run">最近重建</div>
         </div>
     </div>
-    <div class="filters-bar">
-        <input type="text" id="resource-filter-gateway" data-i18n-placeholder="resource_filter_gateway" placeholder="PE/POP 名称">
-        <input type="text" id="resource-filter-interface" data-i18n-placeholder="resource_filter_interface" placeholder="接口名称">
-        <input type="text" id="resource-filter-desc" data-i18n-placeholder="resource_filter_desc" placeholder="接口备注/服务编号">
-        <input type="text" id="resource-filter-vrf" data-i18n-placeholder="resource_filter_vrf" placeholder="VRF">
-        <input type="text" id="resource-filter-ip" data-i18n-placeholder="resource_filter_ip" placeholder="PE互联地址">
-        <input type="text" id="resource-filter-customer" data-i18n-placeholder="resource_filter_customer" placeholder="客户信息">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-resource-search" data-i18n="btn_search">搜索</button>
-    </div>
-    <div class="table-wrap">
-        <table class="table" id="resource-table">
-            <thead>
-                <tr>
-                    <th data-i18n="resource_th_gateway">PE名称</th>
-                    <th data-i18n="resource_th_interface">接口</th>
-                    <th data-i18n="resource_th_desc">接口备注</th>
-                    <th data-i18n="resource_th_vrf">VRF</th>
-                    <th data-i18n="resource_th_ip">PE互联地址</th>
-                    <th data-i18n="resource_th_vlan">VLAN</th>
-                    <th data-i18n="resource_th_as">CE AS</th>
-                    <th data-i18n="resource_th_customer">客户信息</th>
-                    <th data-i18n="resource_th_config">配置文件</th>
-                </tr>
-            </thead>
-            <tbody id="resource-list"></tbody>
-        </table>
-    </div>
-    <div class="devices-footer">
-        <div class="pagination" id="resource-pagination"></div>
-        <div class="per-page">
-            <span data-i18n="per_page">每页</span>
-            <select id="resource-per-page">
-                <option value="20">20</option>
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-                <option value="200">200</option>
-            </select>
-            <span data-i18n="resource_rows">条</span>
+    <section class="resource-section" id="resource-summary-view">
+        <div class="resource-section-header">
+            <div>
+                <h3 class="dashboard-card-title" data-i18n="resource_summary_title">PE 数量统计</h3>
+                <p class="form-hint" data-i18n="resource_summary_hint">点击 PE 名称查看该设备的接口资源明细。</p>
+            </div>
         </div>
-    </div>
-    <section class="dashboard-card" style="margin-top:1rem;">
-        <h3 class="dashboard-card-title" data-i18n="resource_summary_title">PE 数量统计</h3>
         <div class="table-wrap">
-            <table class="table">
+            <table class="table resource-summary-table">
                 <thead>
                     <tr>
                         <th data-i18n="resource_th_gateway">PE名称</th>
@@ -226,6 +191,56 @@
                 </thead>
                 <tbody id="resource-summary-list"></tbody>
             </table>
+        </div>
+    </section>
+
+    <section class="resource-section hidden" id="resource-detail-view">
+        <div class="resource-section-header resource-detail-header">
+            <div>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-resource-back" data-i18n="resource_back_summary">返回 PE 统计</button>
+                <h3 class="dashboard-card-title" id="resource-detail-title">接口资源明细</h3>
+                <p class="form-hint" id="resource-detail-subtitle"></p>
+            </div>
+        </div>
+        <div class="filters-bar resource-filters">
+            <input type="text" id="resource-filter-interface" data-i18n-placeholder="resource_filter_interface" placeholder="接口名称">
+            <input type="text" id="resource-filter-desc" data-i18n-placeholder="resource_filter_desc" placeholder="接口备注/服务编号">
+            <input type="text" id="resource-filter-vrf" data-i18n-placeholder="resource_filter_vrf" placeholder="VRF">
+            <input type="text" id="resource-filter-ip" data-i18n-placeholder="resource_filter_ip" placeholder="PE互联地址">
+            <input type="text" id="resource-filter-customer" data-i18n-placeholder="resource_filter_customer" placeholder="客户信息">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-resource-search" data-i18n="btn_search">搜索</button>
+        </div>
+        <div class="table-wrap resource-detail-table-wrap">
+            <table class="table resource-detail-table" id="resource-table">
+                <thead>
+                    <tr>
+                        <th data-i18n="resource_th_interface">接口</th>
+                        <th data-i18n="resource_th_desc">接口备注</th>
+                        <th data-i18n="resource_th_vrf">VRF</th>
+                        <th data-i18n="resource_th_ip">PE互联地址</th>
+                        <th data-i18n="resource_th_secondary">Secondary地址</th>
+                        <th data-i18n="resource_th_vlan">VLAN</th>
+                        <th data-i18n="resource_th_as">CE AS</th>
+                        <th data-i18n="resource_th_qos">QoS策略</th>
+                        <th data-i18n="resource_th_customer">客户信息</th>
+                        <th data-i18n="resource_th_config">配置文件</th>
+                    </tr>
+                </thead>
+                <tbody id="resource-list"></tbody>
+            </table>
+        </div>
+        <div class="devices-footer">
+            <div class="pagination" id="resource-pagination"></div>
+            <div class="per-page">
+                <span data-i18n="per_page">每页</span>
+                <select id="resource-per-page">
+                    <option value="20">20</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+                <span data-i18n="resource_rows">条</span>
+            </div>
         </div>
     </section>
 </div>

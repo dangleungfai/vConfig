@@ -290,7 +290,10 @@ function showTab(name) {
     try { sessionStorage.setItem('vconfig_tab', name); } catch (e) {}
     // 切换 Tab 时同步地址栏 hash，避免从 #config-device/... 进入后点击其他菜单时 URL 不更新
     if (name !== 'config-device') {
-        location.hash = name === 'dashboard' ? '' : name;
+        const currentHash = (location.hash || '').replace(/^#/, '');
+        if (!(name === 'resources' && currentHash.startsWith('resources/'))) {
+            location.hash = name === 'dashboard' ? '' : name;
+        }
     }
     if (name === 'dashboard') loadDashboard();
     if (name === 'devices') { loadDevices(); refreshDeviceTypeOptions().catch(() => {}); }
@@ -351,6 +354,13 @@ document.body.addEventListener('click', e => {
     }
 });
 
+window.addEventListener('hashchange', () => {
+    const activePanel = document.querySelector('.panel.active');
+    if (activePanel && activePanel.id === 'panel-resources') {
+        loadResources();
+    }
+});
+
 function toast(message, type) {
     type = type || 'info';
     const container = document.getElementById('toast-container');
@@ -365,11 +375,15 @@ function toast(message, type) {
 // 配置资源索引
 let resourcePage = 1;
 let resourcePerPage = 50;
+let resourceCurrentGateway = '';
 
 function resourceParams(includePaging) {
     const params = new URLSearchParams();
+    if (resourceCurrentGateway) {
+        params.set('gateway', resourceCurrentGateway);
+        params.set('gateway_mode', 'exact');
+    }
     const filters = [
-        ['gateway', 'resource-filter-gateway'],
         ['interface_name', 'resource-filter-interface'],
         ['interface_description', 'resource-filter-desc'],
         ['vrf_name', 'resource-filter-vrf'],
@@ -395,7 +409,23 @@ function setResourceStat(id, value) {
 
 async function loadResources() {
     if (!document.getElementById('panel-resources')) return;
-    await Promise.all([loadResourceSummary(), loadResourceSearch()]);
+    const hash = (location.hash || '').replace(/^#/, '');
+    if (hash.startsWith('resources/')) {
+        try {
+            resourceCurrentGateway = decodeURIComponent(hash.slice('resources/'.length));
+        } catch (_) {
+            resourceCurrentGateway = '';
+        }
+    } else if (hash === 'resources') {
+        resourceCurrentGateway = '';
+    }
+    await loadResourceSummary();
+    if (resourceCurrentGateway) {
+        showResourceDetailView(resourceCurrentGateway, false);
+        await loadResourceSearch();
+    } else {
+        showResourceSummaryView(false);
+    }
 }
 
 async function loadResourceSummary() {
@@ -415,24 +445,54 @@ async function loadResourceSummary() {
             tbody.innerHTML = '<tr><td colspan="4">暂无索引数据，请点击“重建索引”。</td></tr>';
             return;
         }
-        tbody.innerHTML = items.slice(0, 200).map(item => `
-            <tr>
-                <td>${escapeHtml(item.gateway || '')}</td>
+        tbody.innerHTML = items.map(item => {
+            const gateway = item.gateway || '';
+            return `
+            <tr class="resource-summary-row" data-gateway="${escapeHtml(gateway)}">
+                <td><button type="button" class="link-button resource-gateway-link" data-gateway="${escapeHtml(gateway)}">${escapeHtml(gateway)}</button></td>
                 <td>${escapeHtml(item.device_profile || '')}</td>
                 <td>${escapeHtml(item.device_model || '')}</td>
                 <td>${escapeHtml(item.count ?? 0)}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     } catch (e) {
         console.warn('loadResourceSummary failed', e);
         tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(e.message || '加载失败')}</td></tr>`;
     }
 }
 
+function showResourceSummaryView(updateHash) {
+    resourceCurrentGateway = '';
+    resourcePage = 1;
+    document.getElementById('resource-summary-view')?.classList.remove('hidden');
+    document.getElementById('resource-detail-view')?.classList.add('hidden');
+    if (updateHash) location.hash = 'resources';
+}
+
+function clearResourceFilters() {
+    ['resource-filter-interface', 'resource-filter-desc', 'resource-filter-vrf', 'resource-filter-ip', 'resource-filter-customer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+}
+
+function showResourceDetailView(gateway, updateHash) {
+    resourceCurrentGateway = gateway || '';
+    document.getElementById('resource-summary-view')?.classList.add('hidden');
+    document.getElementById('resource-detail-view')?.classList.remove('hidden');
+    const title = document.getElementById('resource-detail-title');
+    const subtitle = document.getElementById('resource-detail-subtitle');
+    if (title) title.textContent = `${resourceCurrentGateway} 接口资源明细`;
+    if (subtitle) subtitle.textContent = window.t ? window.t('resource_detail_hint') : '可按接口、备注、VRF、地址和客户信息继续筛选。';
+    if (updateHash && resourceCurrentGateway) location.hash = `resources/${encodeURIComponent(resourceCurrentGateway)}`;
+}
+
 async function loadResourceSearch() {
     const tbody = document.getElementById('resource-list');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="9">加载中...</td></tr>';
+    if (!resourceCurrentGateway) return;
+    tbody.innerHTML = '<tr><td colspan="10">加载中...</td></tr>';
     try {
         const params = resourceParams(true);
         const res = await fetch(`${API}/config-resources/search?${params.toString()}`);
@@ -440,20 +500,21 @@ async function loadResourceSearch() {
         if (!res.ok) throw new Error(data.error || '加载资源列表失败');
         const items = Array.isArray(data.items) ? data.items : [];
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="9">暂无匹配资源。</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10">暂无匹配资源。</td></tr>';
         } else {
             tbody.innerHTML = items.map(item => {
                 const configPath = item.config_path || '';
                 const fileName = configPath.split(/[\\/]/).pop() || configPath;
                 return `
                     <tr>
-                        <td>${escapeHtml(item.gateway || '')}</td>
                         <td>${escapeHtml(item.interface_name || '')}</td>
                         <td>${escapeHtml(item.interface_description || '')}</td>
                         <td>${escapeHtml(item.vrf_name || '')}</td>
                         <td>${escapeHtml(item.pe_address || '')}</td>
+                        <td>${escapeHtml(item.secondary_ip || '')}</td>
                         <td>${escapeHtml(item.vlan_id || '')}</td>
                         <td>${escapeHtml(item.remote_as || '')}</td>
+                        <td>${escapeHtml(item.qos_policy || '')}</td>
                         <td>${escapeHtml(item.customer_info || '')}</td>
                         <td title="${escapeHtml(configPath)}">${escapeHtml(fileName)}</td>
                     </tr>
@@ -463,7 +524,7 @@ async function loadResourceSearch() {
         renderResourcePagination(data.total || 0, data.page || resourcePage, data.per_page || resourcePerPage);
     } catch (e) {
         console.warn('loadResourceSearch failed', e);
-        tbody.innerHTML = `<tr><td colspan="9">${escapeHtml(e.message || '加载失败')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">${escapeHtml(e.message || '加载失败')}</td></tr>`;
         renderResourcePagination(0, 1, resourcePerPage);
     }
 }
@@ -484,11 +545,30 @@ function renderResourcePagination(total, page, perPage) {
 }
 
 function initResourceIndexHandlers() {
+    document.getElementById('resource-summary-list')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-gateway]');
+        if (!btn) return;
+        const gateway = btn.dataset.gateway || '';
+        if (!gateway) return;
+        clearResourceFilters();
+        resourcePage = 1;
+        showResourceDetailView(gateway, false);
+        const nextHash = `resources/${encodeURIComponent(gateway)}`;
+        const currentHash = (location.hash || '').replace(/^#/, '');
+        if (currentHash === nextHash) {
+            loadResourceSearch();
+        } else {
+            location.hash = nextHash;
+        }
+    });
+    document.getElementById('btn-resource-back')?.addEventListener('click', () => {
+        showResourceSummaryView(true);
+    });
     document.getElementById('btn-resource-search')?.addEventListener('click', () => {
         resourcePage = 1;
         loadResourceSearch();
     });
-    ['resource-filter-gateway', 'resource-filter-interface', 'resource-filter-desc', 'resource-filter-vrf', 'resource-filter-ip', 'resource-filter-customer'].forEach(id => {
+    ['resource-filter-interface', 'resource-filter-desc', 'resource-filter-vrf', 'resource-filter-ip', 'resource-filter-customer'].forEach(id => {
         document.getElementById(id)?.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
                 resourcePage = 1;
@@ -524,7 +604,8 @@ function initResourceIndexHandlers() {
             if (!res.ok) throw new Error(data.error || '重建失败');
             toast(window.t ? window.t('toast_resource_rebuilt') : '资源索引已重建', 'success');
             resourcePage = 1;
-            await loadResources();
+            await loadResourceSummary();
+            if (resourceCurrentGateway) await loadResourceSearch();
         } catch (e) {
             toast(e.message || (window.t ? window.t('toast_operation_failed') : '操作失败'), 'error');
         } finally {
